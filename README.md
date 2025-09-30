@@ -1,4 +1,4 @@
-# 프로젝트 개요: 스무스(SMooS, Smart Mobility Service)
+# 프로젝트 개요: 스무스(SMS, Seoul Mobility Service)
 
 서울시 공공자전거 따릉이 서비스를 기반으로, 사용자 맞춤형 대여소 추천과 실시간 모빌리티 데이터 분석을 지원하는 스마트 플랫폼.
 
