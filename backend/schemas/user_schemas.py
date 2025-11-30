@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -7,7 +7,7 @@ from datetime import datetime
 class UserBase(BaseModel):
     """사용자 모델의 기본 스키마"""
     username: str
-    email: str
+    email: EmailStr
 
 class UserCreate(UserBase):
     """사용자 생성을 위한 스키마 (비밀번호 포함)"""
@@ -34,14 +34,26 @@ class RouteRequest(BaseModel):
     end_lat: float = Field(..., example=37.55167, description="도착지 위도")
     end_lon: float = Field(..., example=127.07323, description="도착지 경도")
 
+class NearestStationInfo(BaseModel):
+    """가까운 대여소 정보를 담는 모델"""
+    station_id: str
+    station_display_name: str
+    latitude: float
+    longitude: float
+    distance_m: float = Field(..., description="요청 지점으로부터의 거리 (미터)")
+
+class RouteSegment(BaseModel):
+    """경로의 한 구간(예: first-mile)에 대한 대여소 정보를 담는 모델"""
+    start_station: Optional[NearestStationInfo] = None
+    end_station: Optional[NearestStationInfo] = None
+
 class RouteResponse(BaseModel):
     """경로 최적화 응답을 위한 모델"""
-    message: str = Field(..., example="Route optimization is under development.")
-    path: List[Dict[str, Any]] = Field(..., example=[
-        {"type": "WALK", "duration": "5 mins", "distance": "400m"},
-        {"type": "BIKE", "station_id": "ST-123", "duration": "10 mins", "distance": "1.5km"},
-        {"type": "WALK", "duration": "3 mins", "distance": "250m"}
-    ])
+    message: Optional[str] = Field(None, example="Found nearest stations for first and last mile.")
+    path: Optional[List[Dict[str, Any]]] = Field(None, description="대중교통 경로 정보 (미구현)")
+    first_mile: Optional[RouteSegment] = None
+    last_mile: Optional[RouteSegment] = None
+
 
 # --- 개인화된 패턴 분석을 위한 스키마 ---
 

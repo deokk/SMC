@@ -1,10 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException
+import math
+import httpx
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import select, Table, MetaData, func, String
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta, date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 import logging
+import redis
+import json
+import asyncio
 
 
 # db.database 모듈에서 엔진과 세션 의존성 주입 함수 가져오기
@@ -12,7 +18,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from db.database import engine, get_db
+from db.redis_db import get_redis_conn # Redis 의존성 추가
 from services.route_service import RouteService
+from backend import security
 from backend.crud import user_crud
 from backend.schemas.user_schemas import (
     User, 
@@ -20,13 +28,29 @@ from backend.schemas.user_schemas import (
     UserResponse, 
     RouteRequest, 
     RouteResponse, 
-    PersonalizedPatternResponse
+    PersonalizedPatternResponse,
+    RiderLocation,
+    NearestStationInfo,
+    RouteSegment
 )
 
 # FastAPI 앱 인스턴스 생성
 app = FastAPI()
 
+# --- 환경 변수 로드 ---
+MAP_API_KEY = os.getenv("MAP_API_KEY")
+
+
 # --- 모든 Pydantic 모델 정의 ---
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class LocationUpdate(BaseModel):
+    """라이더 위치 업데이트 요청을 위한 모델"""
+    latitude: float = Field(..., example=37.5665)
+    longitude: float = Field(..., example=126.9780)
 
 class StationRealtime(BaseModel):
     station_id: str
@@ -101,10 +125,6 @@ def read_root():
 
 @app.post("/users/register", response_model=UserResponse)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    """
-    새로운 사용자를 등록합니다.
-    - 사용자 이름 또는 이메일이 이미 존재하면 400 에러를 반환합니다.
-    """
     db_user_by_username = user_crud.get_user_by_username(db, username=user.username)
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="이미 등록된 사용자 이름입니다.")
@@ -116,17 +136,89 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     created_user = user_crud.create_user(db=db, user=user)
     return created_user
 
+@app.post("/token", response_model=Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    user = user_crud.get_user_by_username(db, username=form_data.username)
+    if not user or not security.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/riders/{rider_id}/location", status_code=204)
+async def update_rider_location(
+    rider_id: str,
+    location: LocationUpdate,
+    redis_conn: redis.Redis = Depends(get_redis_conn)
+):
+    key = f"rider_location:{rider_id}"
+    data = {
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "timestamp": datetime.now().isoformat()
+    }
+    redis_conn.setex(key, timedelta(hours=1), json.dumps(data))
+    return None
+
+@app.get("/riders/{rider_id}/track", response_model=RiderLocation)
+async def track_rider(rider_id: str, redis_conn: redis.Redis = Depends(get_redis_conn)):
+    key = f"rider_location:{rider_id}"
+    data = redis_conn.get(key)
+    
+    if not data:
+        raise HTTPException(status_code=404, detail="Rider location not found.")
+    
+    location_data = json.loads(data)
+    
+    return RiderLocation(
+        rider_id=rider_id,
+        latitude=location_data["latitude"],
+        longitude=location_data["longitude"],
+        timestamp=datetime.fromisoformat(location_data["timestamp"])
+    )
+
+@app.websocket("/ws/track/{rider_id}")
+async def websocket_track_rider(
+    websocket: WebSocket,
+    rider_id: str,
+    redis_conn: redis.Redis = Depends(get_redis_conn)
+):
+    await websocket.accept()
+    last_timestamp = None
+    key = f"rider_location:{rider_id}"
+    
+    try:
+        while True:
+            data = redis_conn.get(key)
+            if data:
+                location_data = json.loads(data)
+                current_timestamp = location_data["timestamp"]
+                
+                if current_timestamp != last_timestamp:
+                    await websocket.send_json(location_data)
+                    last_timestamp = current_timestamp
+            
+            await asyncio.sleep(1)
+            
+    except WebSocketDisconnect:
+        print(f"Client {websocket.client} disconnected from tracking rider {rider_id}")
+    except Exception as e:
+        print(f"An error occurred in websocket for rider {rider_id}: {e}")
+    finally:
+        await websocket.close()
+
 @app.get("/users/{user_id}/patterns", response_model=PersonalizedPatternResponse)
 def get_user_patterns(user_id: int, db: Session = Depends(get_db)):
-    """
-    사용자의 개인화된 라이딩 패턴을 반환합니다. (현재는 플레이스홀더)
-    - TODO: 실제 사용자 데이터 기반 분석 로직 구현 필요
-    """
-    # Check if user exists
-    db_user = user_crud.get_user(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
     return PersonalizedPatternResponse(
         message="Personalized pattern analysis is under development.",
         favorite_station_id="ST-509",
@@ -134,21 +226,122 @@ def get_user_patterns(user_id: int, db: Session = Depends(get_db)):
         total_trips=42
     )
 
+# --- 경로 최적화 도우미 함수 ---
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371e3
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_phi / 2) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def find_nearest_station(latitude: float, longitude: float, db: Session) -> Optional[NearestStationInfo]:
+    stations_query = select(
+        BikeAvailabilityRealtime.c.station_id,
+        BikeAvailabilityRealtime.c.station_display_name,
+        BikeAvailabilityRealtime.c.latitude,
+        BikeAvailabilityRealtime.c.longitude,
+        BikeAvailabilityRealtime.c.available_bikes
+    )
+    all_stations = db.execute(stations_query).fetchall()
+
+    if not all_stations:
+        return None
+
+    stations_with_dist = [(s, haversine_distance(latitude, longitude, s.latitude, s.longitude)) for s in all_stations]
+    stations_with_dist.sort(key=lambda x: x[1])
+
+    for station, dist in stations_with_dist:
+        if station.available_bikes > 0:
+            return NearestStationInfo(
+                station_id=station.station_id,
+                station_display_name=station.station_display_name,
+                latitude=station.latitude,
+                longitude=station.longitude,
+                distance_m=round(dist)
+            )
+    return None
+
+async def get_kakao_directions(start_lon: float, start_lat: float, end_lon: float, end_lat: float, api_key: str) -> Optional[Dict[str, Any]]:
+    """카카오 모빌리티 API를 호출하여 대중교통 길찾기 결과를 가져옵니다."""
+    url = "https://apis-navi.kakaomobility.com/v1/directions"
+    headers = {"Authorization": f"KakaoAK {api_key}"}
+    params = {
+        "origin": f"{start_lon},{start_lat}",
+        "destination": f"{end_lon},{end_lat}",
+        "alternatives": "false" # 가장 좋은 경로 1개만 받기
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logging.error(f"Kakao API request failed: {e.response.status_code} - {e.response.text}")
+            return None
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during Kakao API call: {e}")
+            return None
+
 @app.post("/route/optimized", response_model=RouteResponse)
 async def get_optimized_route(request: RouteRequest, db: Session = Depends(get_db)):
-    """
-    출발지와 도착지를 받아 최적화된 경로를 반환합니다. (현재는 플레이스홀더)
-    - TODO: 실제 경로 탐색 및 대중교통 API 연동 로직 구현 필요
-    """
-    return RouteResponse(
-        message="Route optimization is under development.",
-        path=[
-            {"type": "WALK", "duration": "5 mins", "distance": "400m"},
-            {"type": "BIKE", "station_id": "ST-123", "duration": "10 mins", "distance": "1.5km"},
-            {"type": "WALK", "duration": "3 mins", "distance": "250m"}
-        ]
-    )
+    if not MAP_API_KEY:
+        raise HTTPException(status_code=500, detail="MAP_API_KEY is not configured on the server.")
 
+    # 1. 카카오 API로 대중교통 경로 조회
+    kakao_data = await get_kakao_directions(request.start_lon, request.start_lat, request.end_lon, request.end_lat, MAP_API_KEY)
+    
+    if not kakao_data or not kakao_data.get("routes"):
+        raise HTTPException(status_code=503, detail="Could not retrieve route from external API.")
+
+    # 2. 대중교통 승하차 지점 좌표 추출
+    sections = kakao_data["routes"][0].get("sections", [])
+    # 'mode'가 'BUS' 또는 'SUBWAY'인 section만 대중교통 구간으로 간주
+    transit_sections = [s for s in sections if s.get("mode") in ["BUS", "SUBWAY"]]
+    
+    if not transit_sections:
+        # 대중교통 구간이 없는 경우 (도보 전용 경로 등)
+        start_station = find_nearest_station(request.start_lat, request.start_lon, db)
+        end_station = find_nearest_station(request.end_lat, request.end_lon, db)
+        if not start_station or not end_station:
+            raise HTTPException(status_code=404, detail="Could not find any nearby stations for this walking route.")
+        
+        # 이 경우, first_mile에 전체 구간의 대여소 정보를 담아 응답
+        segment = RouteSegment(start_station=start_station, end_station=end_station)
+        return RouteResponse(
+            message="This is a walking-only route. Found nearest stations for the whole journey.",
+            path=sections,
+            first_mile=segment
+        )
+
+    # 대중교통 시작 지점과 끝 지점 좌표
+    transit_start_lon, transit_start_lat = transit_sections[0]["guides"][0]["x"], transit_sections[0]["guides"][0]["y"]
+    last_transit_section_guides = transit_sections[-1]["guides"]
+    transit_end_lon, transit_end_lat = last_transit_section_guides[-1]["x"], last_transit_section_guides[-1]["y"]
+
+    # 3. First-mile 및 Last-mile 대여소 찾기
+    # First-mile: 사용자 출발지 -> 대중교통 승차지
+    fm_start_station = find_nearest_station(request.start_lat, request.start_lon, db)
+    fm_end_station = find_nearest_station(transit_start_lat, transit_start_lon, db)
+    first_mile_segment = RouteSegment(start_station=fm_start_station, end_station=fm_end_station)
+
+    # Last-mile: 대중교통 하차지 -> 최종 목적지
+    lm_start_station = find_nearest_station(transit_end_lat, transit_end_lon, db)
+    lm_end_station = find_nearest_station(request.end_lat, request.end_lon, db)
+    last_mile_segment = RouteSegment(start_station=lm_start_station, end_station=lm_end_station)
+
+    return RouteResponse(
+        message="Successfully found nearest stations for first and last mile of the transit route.",
+        path=sections, # 카카오가 제공한 전체 경로 정보
+        first_mile=first_mile_segment,
+        last_mile=last_mile_segment
+    )
 
 @app.get("/stations/realtime", response_model=List[StationRealtime])
 def get_realtime_stations(
