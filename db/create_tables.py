@@ -17,30 +17,9 @@ from sqlalchemy import (
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from db.database import engine
 
-# Import the User model and its Base
-from backend.models.user import Base # New import
-
-# db/create_tables.py
-import sys
-import os
-from sqlalchemy import (
-    create_engine,
-    MetaData,
-    Table,
-    Column,
-    String,
-    DateTime,
-    Float,
-    Integer,
-    PrimaryKeyConstraint
-)
-
-# Add the parent directory to the path to allow imports from db
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from db.database import engine
-
-# Import the User model and its Base
-from backend.models.user import Base # New import
+# Import the ORM Bases and models
+from backend.models.user import Base # User model's Base
+from backend.models.ride import UserRideHistory # Import the new ride history model
 
 metadata = MetaData()
 
@@ -144,8 +123,10 @@ def create_tables():
     """
     try:
         print("Creating tables in the database if they don't exist...")
-        # Create tables defined via declarative_base
+        # Create tables defined via declarative_base (User, UserRideHistory)
+        # The UserRideHistory model is now included here automatically
         Base.metadata.create_all(engine, checkfirst=True)
+        
         # Create tables defined via MetaData
         metadata.create_all(engine, checkfirst=True)
         print("Tables created successfully (if they didn't already exist).")
@@ -154,4 +135,3 @@ def create_tables():
 
 if __name__ == "__main__":
     create_tables()
-

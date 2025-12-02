@@ -1,6 +1,7 @@
 import math
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import select, Table, MetaData, func, String
@@ -33,9 +34,31 @@ from backend.schemas.user_schemas import (
     NearestStationInfo,
     RouteSegment
 )
+from backend.schemas.ride_schemas import RideStartRequest, RideEndRequest, RideResponse
+from backend.crud import ride_crud
+from backend.models.ride import UserRideHistory # For type hinting and ORM operations
 
 # FastAPI 앱 인스턴스 생성
 app = FastAPI()
+
+# --- CORS 미들웨어 설정 ---
+# 개발 환경에서는 모든 오리진을 허용합니다.
+# 프로덕션 환경에서는 특정 프론트엔드 주소만 허용하도록 변경해야 합니다.
+origins = [
+    "http://localhost",
+    "http://localhost:3000", # React 기본 포트
+    "http://localhost:8080", # Vue 기본 포트
+    "http://localhost:4200", # Angular 기본 포트
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # --- 환경 변수 로드 ---
 MAP_API_KEY = os.getenv("MAP_API_KEY")
@@ -226,6 +249,70 @@ def get_user_patterns(user_id: int, db: Session = Depends(get_db)):
         total_trips=42
     )
 
+@app.post("/rides/start", response_model=RideResponse)
+def start_ride(
+    ride_request: RideStartRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_current_user)
+):
+    """
+    사용자의 새로운 운행을 시작합니다.
+    """
+    active_ride = ride_crud.get_active_ride_by_user(db, user_id=current_user.id)
+    if active_ride:
+        raise HTTPException(status_code=400, detail="이미 운행 중인 기록이 있습니다. 기존 운행을 먼저 종료해주세요.")
+
+    nearest_station = find_nearest_station(ride_request.latitude, ride_request.longitude, db)
+    if not nearest_station:
+        raise HTTPException(status_code=404, detail="시작 지점 근처의 따릉이 대여소를 찾을 수 없습니다.")
+    
+    db_ride = ride_crud.create_ride(
+        db=db,
+        user_id=current_user.id,
+        start_station_id=nearest_station.station_id,
+        start_time=datetime.now()
+    )
+    return db_ride
+
+@app.post("/rides/end", response_model=RideResponse)
+def end_ride(
+    ride_request: RideEndRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_current_user)
+):
+    """
+    사용자의 현재 운행을 종료합니다.
+    """
+    active_ride = ride_crud.get_active_ride_by_user(db, user_id=current_user.id)
+    if not active_ride:
+        raise HTTPException(status_code=400, detail="현재 운행 중인 기록이 없습니다. 먼저 운행을 시작해주세요.")
+
+    nearest_station = find_nearest_station(ride_request.latitude, ride_request.longitude, db)
+    if not nearest_station:
+        raise HTTPException(status_code=404, detail="종료 지점 근처의 따릉이 대여소를 찾을 수 없습니다.")
+
+    db_ride = ride_crud.end_ride(
+        db=db,
+        ride_id=active_ride.id,
+        end_station_id=nearest_station.station_id,
+        end_time=datetime.now()
+    )
+    if not db_ride:
+        raise HTTPException(status_code=500, detail="운행 기록을 업데이트하는 데 실패했습니다.")
+    
+    return db_ride
+
+@app.get("/users/me/rides", response_model=List[RideResponse])
+def get_my_ride_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_current_user)
+):
+    """
+    현재 로그인된 사용자의 모든 운행 기록을 조회합니다.
+    """
+    rides = ride_crud.get_rides_by_user(db, user_id=current_user.id)
+    return [RideResponse.model_validate(ride) for ride in rides]
+
 # --- 경로 최적화 도우미 함수 ---
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -346,22 +433,50 @@ async def get_optimized_route(request: RouteRequest, db: Session = Depends(get_d
 @app.get("/stations/realtime", response_model=List[StationRealtime])
 def get_realtime_stations(
     db: Session = Depends(get_db),
+    redis_conn: redis.Redis = Depends(get_redis_conn),
     station_id: Optional[str] = None,
     station_number: Optional[str] = None,
     station_display_name: Optional[str] = None
 ):
-    query = select(BikeAvailabilityRealtime)
-    
-    if station_id:
-        query = query.where(BikeAvailabilityRealtime.c.station_id == station_id)
-    if station_number:
-        query = query.where(BikeAvailabilityRealtime.c.station_number.cast(String).ilike(f"%{station_number}%"))
-    if station_display_name:
-        query = query.where(BikeAvailabilityRealtime.c.station_display_name.ilike(f"%{station_display_name}%"))
+    # 필터가 있는 경우 캐시를 사용하지 않음
+    if station_id or station_number or station_display_name:
+        query = select(BikeAvailabilityRealtime)
+        if station_id:
+            query = query.where(BikeAvailabilityRealtime.c.station_id == station_id)
+        if station_number:
+            query = query.where(BikeAvailabilityRealtime.c.station_number.cast(String).ilike(f"%{station_number}%"))
+        if station_display_name:
+            query = query.where(BikeAvailabilityRealtime.c.station_display_name.ilike(f"%{station_display_name}%"))
+        
+        result = db.execute(query).fetchall()
+        return [StationRealtime.model_validate(row._asdict()) for row in result]
 
+    # 필터가 없는 경우 캐시 로직 적용
+    CACHE_KEY = "realtime_stations_data"
+    try:
+        cached_data = redis_conn.get(CACHE_KEY)
+        if cached_data:
+            # 캐시 히트: Redis에서 데이터를 가져와 반환
+            return json.loads(cached_data)
+    except redis.RedisError as e:
+        # 레디스 오류 발생 시, DB에서 직접 가져오도록 함
+        logging.error(f"Redis error in get_realtime_stations: {e}")
+
+    # 캐시 미스: DB에서 데이터를 가져와서 캐시에 저장
+    query = select(BikeAvailabilityRealtime)
     result = db.execute(query).fetchall()
     
     response_data = [StationRealtime.model_validate(row._asdict()) for row in result]
+    
+    # Pydantic 모델 리스트를 JSON 직렬화 가능한 형태로 변환
+    json_compatible_data = [model.model_dump(mode='json') for model in response_data]
+    
+    try:
+        # 60초 TTL로 Redis에 캐시 저장
+        redis_conn.setex(CACHE_KEY, 60, json.dumps(json_compatible_data))
+    except redis.RedisError as e:
+        logging.error(f"Failed to cache data in get_realtime_stations: {e}")
+        
     return response_data
 
 @app.get("/stations/{station_id}/hourly_comparison", response_model=HistoricalComparisonResult)
