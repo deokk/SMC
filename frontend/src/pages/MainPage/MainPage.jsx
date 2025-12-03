@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import KaKaoMap from "../../components/KaKaoMap";
+import KaKaoMap from "../../components/KakaoMap";
+import { mockStations } from "../../mocks/stationMarkers";
 import Header from "./components/Header";
 import RouteCard from "./components/RouteCard";
 import TimeCard from "./components/TimeCard";
@@ -13,13 +14,9 @@ const addDays = (d, days) => {
 };
 
 const parseTimeText = (timeText) => {
-  //期待フォーマット：
-  // "今日午後12:00"
-  // "明日午前09:10"
-  // "12月17日午後02:20"
   try {
     const today = new Date();
-    const parts = timeText.trim().split(/\s+/); // [日付ラベル, 午前/午後, hh:mm]
+    const parts = timeText.trim().split(/\s+/);
 
     if (parts.length < 3) return null;
 
@@ -88,7 +85,7 @@ export default function MainPage() {
 
       <main className="mp-map" aria-label="map area">
         <div className="mp-mapInner">
-          <KaKaoMap />
+          <KaKaoMap stations={mockStations} />
         </div>
       </main>
 
