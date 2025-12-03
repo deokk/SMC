@@ -5,6 +5,7 @@ import Header from "./components/Header";
 import RouteCard from "./components/RouteCard";
 import TimeCard from "./components/TimeCard";
 import TimePickerModal from "./components/TimePickerModal";
+import RouteResult from "./components/RouteResult";
 import "./MainPage.css";
 
 const addDays = (d, days) => {
@@ -55,6 +56,8 @@ export default function MainPage() {
   const [to, setTo] = useState("화양동 주민센터");
   const [timeText, setTimeText] = useState("오늘 오후 12:00");
   const [isTimeOpen, setIsTimeOpen] = useState(false);
+  const [routes, setRoutes] = useState(null);
+  const [isRoutesOpen, setIsRoutesOpen] = useState(false);
 
   const canSubmit = useMemo(() => {
     return (
@@ -68,6 +71,26 @@ export default function MainPage() {
   const closeTimeModal = () => setIsTimeOpen(false);
 
   const initialTimeValue = useMemo(() => parseTimeText(timeText), [timeText]);
+
+  // 경로 검색
+  const handleSearch = async () => {
+    if (!window.kakao?.maps) return;
+
+    try {
+      // 실제로는 from/to 주소로 좌표를 검색해야 함
+      // 여기서는 시뮬레이션으로 시간 데이터를 설정
+      const mockRoutes = {
+        transit: 45, // 분
+        walking: 28,
+        bike: 18,
+      };
+
+      setRoutes(mockRoutes);
+      setIsRoutesOpen(true);
+    } catch (error) {
+      console.error("경로 검색 실패:", error);
+    }
+  };
 
   return (
     <div className="mp-root">
@@ -84,9 +107,18 @@ export default function MainPage() {
       </div>
 
       <main className="mp-map" aria-label="map area">
-        <div className="mp-mapInner">
-          <KaKaoMap stations={mockStations} />
-        </div>
+        {!isRoutesOpen && (
+          <div className="mp-mapInner">
+            <KaKaoMap stations={mockStations} />
+          </div>
+        )}
+        {isRoutesOpen && (
+          <RouteResult
+            routes={routes}
+            isOpen={isRoutesOpen}
+            onBack={() => setIsRoutesOpen(false)}
+          />
+        )}
       </main>
 
       <nav className="mp-bottom" aria-label="bottom navigation">
@@ -99,6 +131,7 @@ export default function MainPage() {
           type="button"
           disabled={!canSubmit}
           aria-disabled={!canSubmit}
+          onClick={handleSearch}
         >
           예측 및 길찾기
         </button>
