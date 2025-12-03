@@ -1,0 +1,32 @@
+[
+  {
+    "station_id": "ST-974",
+    "station_number": 592,
+    "station_display_name": "건국대학교 학생회관",
+    "timestamp": "2025-12-03T18:19:27.955941",
+    "latitude": 37.54191208,
+    "longitude": 127.07763672,
+    "available_bikes": 9,
+    "station_capacity": 30,
+    "available_racks": 21,
+    "is_stockout": 0,
+    "hour": 18,
+    "day_of_week": 2,
+    "is_weekend": 0,
+    "air_quality_pm10": 24,
+    "air_quality_pm25": 11,
+    "air_quality_o3": 0.033,
+    "air_quality_no2": null,
+    "air_quality_co": null,
+    "air_quality_so2": null,
+    "air_quality_data_time": "2025-12-03 18:00",
+    "temperature": -4.1,
+    "humidity": 44,
+    "precipitation": 0,
+    "wind_speed": 3.1,
+    "is_raining": 0,
+    "weather_severity": 0,
+    "weather_timestamp": null,
+    "weather_source": "KMA_UltraSrtNcst"
+  }
+]

@@ -1,6 +1,6 @@
 import math
 import httpx
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -12,7 +12,9 @@ import logging
 import redis
 import json
 import asyncio
-
+import joblib
+import pandas as pd
+import numpy as np
 
 # db.database 모듈에서 엔진과 세션 의존성 주입 함수 가져오기
 import sys
@@ -41,12 +43,44 @@ from backend.models.ride import UserRideHistory # For type hinting and ORM opera
 # FastAPI 앱 인스턴스 생성
 app = FastAPI()
 
+
+# --- 모델 및 피처 로딩 ---
+# 서버 시작 시 한 번만 로드하기 위한 전역 변수
+model = None
+feature_columns = None
+
+@app.on_event("startup")
+def load_model():
+    """서버 시작 시 머신러닝 모델과 관련 파일을 로드합니다."""
+    global model, feature_columns
+    
+    model_path = os.path.join('models', 'xgboost_multioutput_model.joblib')
+    features_path = os.path.join('models', 'feature_columns.joblib')
+
+    try:
+        model = joblib.load(model_path)
+        print("✅ XGBoost 모델 로딩 성공")
+    except FileNotFoundError:
+        print(f"❌ 경고: 모델 파일({model_path})을 찾을 수 없습니다. 예측 API가 작동하지 않습니다.")
+    except Exception as e:
+        print(f"❌ 모델 로딩 중 오류 발생: {e}")
+
+    try:
+        feature_columns = joblib.load(features_path)
+        print("✅ 피처 컬럼 로딩 성공")
+    except FileNotFoundError:
+        print(f"❌ 경고: 피처 컬럼 파일({features_path})을 찾을 수 없습니다.")
+    except Exception as e:
+        print(f"❌ 피처 컬럼 로딩 중 오류 발생: {e}")
+
+
 # --- CORS 미들웨어 설정 ---
 # 개발 환경에서는 모든 오리진을 허용합니다.
 # 프로덕션 환경에서는 특정 프론트엔드 주소만 허용하도록 변경해야 합니다.
 origins = [
     "http://localhost",
     "http://localhost:3000", # React 기본 포트
+    "http://localhost:5173", # Vite React 기본 포트 추가
     "http://localhost:8080", # Vue 기본 포트
     "http://localhost:4200", # Angular 기본 포트
 ]
@@ -126,6 +160,50 @@ class HistoricalComparisonResult(BaseModel):
     yesterday: Optional[DailyHourlyComparisonResponse] = None
     two_days_ago: Optional[DailyHourlyComparisonResponse] = None
     last_week: Optional[DailyHourlyComparisonResponse] = None
+
+
+# --- ML 예측 관련 모델 및 헬퍼 함수 ---
+
+class PredictionResponse(BaseModel):
+    """예측 결과 응답 모델"""
+    station_id: str
+    prediction_in_minutes: int
+    predicted_bike_count: int
+    model_loaded: bool
+
+def create_prediction_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    주어진 시계열 데이터프레임으로부터 예측을 위한 피처를 생성합니다.
+    이 함수는 prediction_app.py의 _prepare_features 로직을 기반으로 합니다.
+    """
+    df_features = df.copy()
+    
+    # 시간 관련 피처
+    df_features['hour'] = df_features['timestamp'].dt.hour
+    df_features['hour_sin'] = np.sin(2 * np.pi * df_features['hour'] / 24)
+    df_features['hour_cos'] = np.cos(2 * np.pi * df_features['hour'] / 24)
+    df_features['day_of_week'] = df_features['timestamp'].dt.dayofweek
+    df_features['day_of_week_sin'] = np.sin(2 * np.pi * df_features['day_of_week'] / 7)
+    df_features['day_of_week_cos'] = np.cos(2 * np.pi * df_features['day_of_week'] / 7)
+    df_features['day_of_year'] = df_features['timestamp'].dt.dayofyear
+    df_features['month'] = df_features['timestamp'].dt.month
+    df_features['year'] = df_features['timestamp'].dt.year
+
+    df_features = df_features.set_index('timestamp').sort_index()
+
+    # 지연 피처 (Lag Features)
+    lags = [1, 2, 3, 24, 168]
+    for lag in lags:
+        df_features[f'bike_count_lag_{lag}h'] = df_features['bike_count'].shift(lag)
+
+    # 이동 평균 피처 (Rolling Window Features)
+    rolling_windows = [3, 24]
+    for window in rolling_windows:
+        df_features[f'bike_count_rolling_mean_{window}h'] = df_features['bike_count'].rolling(window=window, min_periods=1).mean()
+    
+    # 마지막 행(가장 최신 데이터)만 반환
+    return df_features.iloc[[-1]]
+
 
 # --- SQLAlchemy 테이블 리플렉션 ---
 metadata = MetaData()
@@ -587,3 +665,108 @@ def get_raw_realtime_stations(
     
     response_data = [StationRealtime.model_validate(row._asdict()) for row in result]
     return response_data
+
+
+@app.get("/stations/{station_id}/predict", response_model=PredictionResponse)
+def predict_bike_count(
+    station_id: str,
+    n_minutes: int = Query(..., ge=0, le=360, description="0에서 360분 사이의 예측 시간(분)"),
+    db: Session = Depends(get_db)
+):
+    """
+    특정 대여소의 N분 후 자전거 대수를 예측합니다.
+    """
+    if model is None or feature_columns is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="예측 모델이 로드되지 않았습니다. 서버 로그를 확인해주세요."
+        )
+
+    # 1. 예측에 필요한 과거 데이터 조회 (최근 168시간 = 7일)
+    seven_days_ago = datetime.now() - timedelta(hours=168)
+    query = (
+        select(
+            BikeAvailabilityHistorical.c.timestamp,
+            BikeAvailabilityHistorical.c.available_bikes.label("bike_count")
+        )
+        .where(BikeAvailabilityHistorical.c.station_id == station_id)
+        .where(BikeAvailabilityHistorical.c.timestamp >= seven_days_ago)
+        .order_by(BikeAvailabilityHistorical.c.timestamp)
+    )
+    
+    historical_df = pd.read_sql(query, db.bind)
+
+    if historical_df.empty or len(historical_df) < 168:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Station ID {station_id}에 대한 예측을 생성하기에 충분한 과거 데이터가 없습니다."
+        )
+
+    # 2. 현재 시점의 자전거 대수 조회
+    realtime_query = (
+        select(BikeAvailabilityRealtime.c.available_bikes)
+        .where(BikeAvailabilityRealtime.c.station_id == station_id)
+        .order_by(BikeAvailabilityRealtime.c.timestamp.desc())
+        .limit(1)
+    )
+    current_bike_count_result = db.execute(realtime_query).scalar_one_or_none()
+
+    if current_bike_count_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Station ID {station_id}에 대한 실시간 데이터를 찾을 수 없습니다."
+        )
+    current_bike_count = current_bike_count_result
+
+    # 3. 피처 생성
+    latest_features_df = create_prediction_features(historical_df)
+    
+    # 생성된 피처에 결측치가 있는지 확인
+    if latest_features_df.isnull().values.any():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="피처 생성 중 결측치가 발생하여 예측을 진행할 수 없습니다."
+        )
+
+    # 4. 모델 예측
+    feature_vector = latest_features_df[feature_columns].values.reshape(1, -1)
+    hourly_predictions = model.predict(feature_vector)[0]
+
+    # 5. 선형 보간법으로 n_minutes 후의 값 계산
+    if n_minutes == 0:
+        predicted_count = current_bike_count
+    else:
+        lower_bound_h = math.floor(n_minutes / 60)
+        upper_bound_h = math.ceil(n_minutes / 60)
+
+        if lower_bound_h == 0:
+            val1_time_min, val1_bike_count = 0, current_bike_count
+            val2_time_min, val2_bike_count = 60, hourly_predictions[0]
+        else:
+            val1_time_min = lower_bound_h * 60
+            val1_bike_count = hourly_predictions[lower_bound_h - 1]
+            val2_time_min = upper_bound_h * 60
+            if upper_bound_h > 6:
+                predicted_count = hourly_predictions[5] # 6시간 예측값으로 대체
+                return PredictionResponse(
+                    station_id=station_id,
+                    prediction_in_minutes=n_minutes,
+                    predicted_bike_count=int(max(0, round(predicted_count))),
+                    model_loaded=True
+                )
+            val2_bike_count = hourly_predictions[upper_bound_h - 1]
+
+        if val2_time_min == val1_time_min:
+            interpolated_bike_count = val1_bike_count
+        else:
+            interpolated_bike_count = val1_bike_count + \
+                                      ((val2_bike_count - val1_bike_count) / (val2_time_min - val1_time_min)) * \
+                                      (n_minutes - val1_time_min)
+        predicted_count = interpolated_bike_count
+
+    return PredictionResponse(
+        station_id=station_id,
+        prediction_in_minutes=n_minutes,
+        predicted_bike_count=int(max(0, round(predicted_count))),
+        model_loaded=True
+    )

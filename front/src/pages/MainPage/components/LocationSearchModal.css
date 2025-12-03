@@ -1,0 +1,164 @@
+.lsm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  z-index: 1000;
+}
+
+.lsm-modal {
+  background: #fff;
+  width: 100%;
+  height: 90vh;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.lsm-header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lsm-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lsm-closeBtn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.lsm-searchBox {
+  padding: 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.lsm-searchInput {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.lsm-searchInput:focus {
+  border-color: #6f7ff2;
+}
+
+.lsm-container {
+  flex: 1;
+  display: flex;
+  gap: 0;
+  overflow: hidden;
+}
+
+.lsm-map {
+  flex: 1;
+  min-width: 50%;
+}
+
+.lsm-results {
+  flex: 0 0 280px;
+  overflow-y: auto;
+  border-left: 1px solid #e5e5e5;
+  background: #f9f9f9;
+}
+
+.lsm-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.lsm-item {
+  padding: 12px;
+  border-bottom: 1px solid #e5e5e5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.lsm-item:hover {
+  background: #f0f0f0;
+}
+
+.lsm-item--selected {
+  background: #e8ecff;
+  border-left: 3px solid #6f7ff2;
+  padding-left: 9px;
+}
+
+.lsm-itemName {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: #000;
+}
+
+.lsm-itemAddr {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
+}
+
+.lsm-empty,
+.lsm-placeholder {
+  padding: 32px 16px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+.lsm-footer {
+  padding: 12px;
+  border-top: 1px solid #e5e5e5;
+  display: flex;
+  gap: 8px;
+}
+
+.lsm-cancelBtn,
+.lsm-confirmBtn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lsm-cancelBtn {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.lsm-cancelBtn:hover {
+  background: #e0e0e0;
+}
+
+.lsm-confirmBtn {
+  background: #6f7ff2;
+  color: #fff;
+}
+
+.lsm-confirmBtn:hover:not(:disabled) {
+  background: #5c6cc8;
+}
+
+.lsm-confirmBtn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
