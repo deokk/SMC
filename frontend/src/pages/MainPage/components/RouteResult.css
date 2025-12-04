@@ -6,6 +6,7 @@
   background: #f4f6fb;
   padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .rr-backBtn {

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import KaKaoMap from "../../components/KakaoMap";
+import SideMenu from "../../components/SideMenu";
 import { mockStations } from "../../mocks/stationMarkers";
 import Header from "./components/Header";
 import RouteCard from "./components/RouteCard";
@@ -58,6 +59,7 @@ export default function MainPage() {
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [routes, setRoutes] = useState(null);
   const [isRoutesOpen, setIsRoutesOpen] = useState(false);
+  const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
 
   const canSubmit = useMemo(() => {
     return (
@@ -122,8 +124,13 @@ export default function MainPage() {
       </main>
 
       <nav className="mp-bottom" aria-label="bottom navigation">
-        <button className="mp-iconBtn" type="button" aria-label="메뉴">
-          P
+        <button
+          className="mp-iconBtn"
+          type="button"
+          aria-label="메뉴"
+          onClick={() => setIsSideMenuOpen(true)}
+        >
+          <img src="/list.svg" alt="메뉴" width="23" height="15" />
         </button>
 
         <button
@@ -140,6 +147,11 @@ export default function MainPage() {
           P
         </button>
       </nav>
+
+      <SideMenu
+        isOpen={isSideMenuOpen}
+        onClose={() => setIsSideMenuOpen(false)}
+      />
 
       <TimePickerModal
         open={isTimeOpen}
