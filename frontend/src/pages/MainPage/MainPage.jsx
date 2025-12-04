@@ -18,33 +18,40 @@ const addDays = (d, days) => {
 const parseTimeText = (timeText) => {
   try {
     const today = new Date();
-    const parts = timeText.trim().split(/\s+/);
+    const text = (timeText ?? "").trim();
+    if (!text) return null;
 
-    if (parts.length < 3) return null;
+    // 허용 포맷:
+    // "오늘 오후 12:00"
+    // "내일 오전 9:10"
+    // "12월 4일 오후 3:20"
+    const m = text.match(
+      /^(오늘|내일|(\d{1,2})월\s*(\d{1,2})일)\s+(오전|오후)\s+(\d{1,2}):(\d{1,2})$/
+    );
+    if (!m) return null;
 
-    const datePart = parts[0];
-    const meridiem = parts[1] === "午前" ? "午前" : "午後";
-    const [hhStr, mmStr] = parts[2].split(":");
-    if (!hhStr || !mmStr) return null;
+    const dateToken = m[1];
+    const monthStr = m[2];
+    const dayStr = m[3];
+    const meridiem = m[4];
+    const hhStr = m[5];
+    const mmStr = m[6];
+
+    let date = new Date(today);
+    if (dateToken === "오늘") {
+      date = new Date(today);
+    } else if (dateToken === "내일") {
+      date = new Date(today);
+      date.setDate(date.getDate() + 1);
+    } else {
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      if (!Number.isFinite(month) || !Number.isFinite(day)) return null;
+      date = new Date(today.getFullYear(), month - 1, day);
+    }
 
     const hour = Math.min(12, Math.max(1, Number(hhStr)));
     const minute = Math.min(59, Math.max(0, Number(mmStr)));
-
-    let date = new Date(today);
-    if (datePart === "今日") {
-      date = new Date(today);
-    } else if (datePart === "明日") {
-      date = addDays(today, 1);
-    } else {
-      if (datePart.includes("月") && datePart.includes("日")) {
-        const m = Number(datePart.split("月")[0]);
-        const dd = Number(datePart.split("月")[1].replace("日", "").trim());
-        const guessed = new Date(today.getFullYear(), m - 1, dd);
-        date = guessed;
-      } else {
-        return null;
-      }
-    }
 
     return { date, meridiem, hour, minute };
   } catch {
