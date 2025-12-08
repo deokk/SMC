@@ -216,6 +216,7 @@
 .mp-map {
   flex: 1;
   padding: 0 0 0;
+  overflow: hidden;
 }
 
 .mp-mapInner {
@@ -252,6 +253,12 @@
   cursor: pointer;
   font-weight: 900;
   font-size: 14px;
+  padding: 0;
+}
+
+.mp-iconBtn img {
+  width: 24px;
+  height: auto;
 }
 
 .mp-cta {

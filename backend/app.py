@@ -96,6 +96,7 @@ app.add_middleware(
 
 # --- 환경 변수 로드 ---
 MAP_API_KEY = os.getenv("MAP_API_KEY")
+ODSAY_API_KEY = os.getenv("ODSAY_API_KEY")
 
 
 # --- 모든 Pydantic 모델 정의 ---
@@ -108,6 +109,25 @@ class LocationUpdate(BaseModel):
     """라이더 위치 업데이트 요청을 위한 모델"""
     latitude: float = Field(..., example=37.5665)
     longitude: float = Field(..., example=126.9780)
+
+class RouteStep(BaseModel):
+    """경로의 각 단계를 나타내는 모델"""
+    type: str = Field(..., description="이동 수단 (e.g., 'WALK', 'BUS', 'SUBWAY')")
+    distance: int = Field(..., description="이동 거리 (미터)")
+    duration: int = Field(..., description="소요 시간 (분)")
+    name: Optional[str] = Field(None, description="버스 번호 또는 지하철 호선")
+    start_name: Optional[str] = Field(None, description="출발 정류장/역")
+    end_name: Optional[str] = Field(None, description="도착 정류장/역")
+    polyline: Optional[List[Tuple[float, float]]] = Field(None, description="해당 구간의 경로선")
+
+class RouteOption(BaseModel):
+    """하나의 경로 옵션을 나타내는 모델"""
+    mode: str = Field(..., description="경로의 대표 이동 수단 (e.g., 'TRANSIT', 'BIKE')")
+    duration: int = Field(..., description="총 소요 시간 (분)")
+    distance: int = Field(..., description="총 이동 거리 (미터)")
+    fare: int = Field(..., description="예상 요금 (원)")
+    steps: List[RouteStep]
+    # polyline: Optional[List[Tuple[float, float]]] = Field(None, description="지도에 표시할 경로선 좌표 목록") # 이제 steps 안에 포함됨
 
 class StationRealtime(BaseModel):
     station_id: str
@@ -391,122 +411,149 @@ def get_my_ride_history(
     rides = ride_crud.get_rides_by_user(db, user_id=current_user.id)
     return [RideResponse.model_validate(ride) for ride in rides]
 
-# --- 경로 최적화 도우미 함수 ---
+# --- 경로 최적화 로직 (ODsay 기반) ---
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371e3
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
-
-    a = math.sin(delta_phi / 2) ** 2 + \
-        math.cos(phi1) * math.cos(phi2) * \
-        math.sin(delta_lambda / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-def find_nearest_station(latitude: float, longitude: float, db: Session) -> Optional[NearestStationInfo]:
-    stations_query = select(
-        BikeAvailabilityRealtime.c.station_id,
-        BikeAvailabilityRealtime.c.station_display_name,
-        BikeAvailabilityRealtime.c.latitude,
-        BikeAvailabilityRealtime.c.longitude,
-        BikeAvailabilityRealtime.c.available_bikes
-    )
-    all_stations = db.execute(stations_query).fetchall()
-
-    if not all_stations:
+async def fetch_lane_data(client: httpx.AsyncClient, map_obj: str) -> Optional[List[Dict]]:
+    """ODsay loadLane API를 호출하여 전체 경로의 상세 그래픽 데이터를 가져옵니다."""
+    if not ODSAY_API_KEY or not map_obj:
+        return None
+    
+    url = "https://api.odsay.com/v1/api/loadLane"
+    params = {"apiKey": ODSAY_API_KEY, "mapObject": f"0:0@{map_obj}"}
+    try:
+        res = await client.get(url, params=params)
+        res.raise_for_status()
+        data = res.json()
+        if "result" in data and "lane" in data["result"]:
+            return data["result"]["lane"]
+        return None
+    except Exception as e:
+        logging.error(f"ODsay loadLane API 호출 실패: {e}")
         return None
 
-    stations_with_dist = [(s, haversine_distance(latitude, longitude, s.latitude, s.longitude)) for s in all_stations]
-    stations_with_dist.sort(key=lambda x: x[1])
+async def get_odsay_public_transit_route(
+    sx: float, sy: float, ex: float, ey: float
+) -> Optional[List[RouteOption]]:
+    """ODsay API를 호출하여 대중교통 경로를 조회하고, 각 구간별 상세 Polyline을 포함하여 가공합니다."""
+    if not ODSAY_API_KEY:
+        logging.error("ODsay API 키가 설정되지 않았습니다.")
+        return None
 
-    for station, dist in stations_with_dist:
-        if station.available_bikes > 0:
-            return NearestStationInfo(
-                station_id=station.station_id,
-                station_display_name=station.station_display_name,
-                latitude=station.latitude,
-                longitude=station.longitude,
-                distance_m=round(dist)
-            )
-    return None
+    url = "https://api.odsay.com/v1/api/searchPubTransPathR"
+    params = {"apiKey": ODSAY_API_KEY, "SX": sx, "SY": sy, "EX": ex, "EY": ey}
 
-async def get_kakao_directions(start_lon: float, start_lat: float, end_lon: float, end_lat: float, api_key: str) -> Optional[Dict[str, Any]]:
-    """카카오 모빌리티 API를 호출하여 대중교통 길찾기 결과를 가져옵니다."""
-    url = "https://apis-navi.kakaomobility.com/v1/directions"
-    headers = {"Authorization": f"KakaoAK {api_key}"}
-    params = {
-        "origin": f"{start_lon},{start_lat}",
-        "destination": f"{end_lon},{end_lat}",
-        "alternatives": "false" # 가장 좋은 경로 1개만 받기
-    }
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, headers=headers, params=params)
+            response = await client.get(url, params=params)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+            if "result" not in data or "path" not in data["result"]:
+                return []
+
+            parsed_routes = []
+            for path in data["result"]["path"]:
+                if not isinstance(path, dict):
+                    continue
+
+                route_info = path.get("info", {})
+                
+                # 전체 경로의 상세 그래픽 데이터 미리 호출
+                graphic_lanes = await fetch_lane_data(client, route_info.get("mapObj"))
+                
+                steps = []
+                # subPath와 graphic_lanes를 매칭하기 위한 인덱스
+                transit_index = 0
+
+                for sub_path in path.get("subPath", []):
+                    if not isinstance(sub_path, dict):
+                        continue
+                    
+                    segment_polyline = None
+                    traffic_type = sub_path.get("trafficType")
+                    
+                    if traffic_type == 3: # 도보
+                        if "movePath" in sub_path:
+                            coords = sub_path["movePath"]
+                            segment_polyline = [(float(p.split(',')[1]), float(p.split(',')[0])) for p in coords.split(' ')]
+                        elif all(k in sub_path for k in ['startX', 'startY', 'endX', 'endY']):
+                            segment_polyline = [(sub_path['startY'], sub_path['startX']), (sub_path['endY'], sub_path['endX'])]
+                    
+                    elif traffic_type in [1, 2]: # 대중교통
+                        if graphic_lanes and transit_index < len(graphic_lanes):
+                            # 순서 기반으로 매칭 (대부분의 경우 잘 동작함)
+                            lane_graphic = graphic_lanes[transit_index]
+                            if lane_graphic and "section" in lane_graphic and lane_graphic["section"]:
+                                coords = lane_graphic["section"][0].get("graphPos")
+                                if coords:
+                                    if isinstance(coords[0], dict):
+                                        segment_polyline = [(point['y'], point['x']) for point in coords]
+                                    else:
+                                        segment_polyline = [(coords[i+1], coords[i]) for i in range(0, len(coords), 2)]
+                            transit_index += 1
+                        
+                        # 그래픽 데이터가 없을 경우, 정류장/역 좌표를 연결하는 직선으로 대체
+                        if not segment_polyline and "passStopList" in sub_path:
+                             stations = sub_path["passStopList"].get("stations", [])
+                             segment_polyline = [(float(s["y"]), float(s["x"])) for s in stations]
+
+                    mode = "WALK"
+                    lane_name = None
+                    if traffic_type in [1, 2]:
+                        mode = "SUBWAY" if traffic_type == 1 else "BUS"
+                        lane_info = sub_path.get("lane", [{}])[0]
+                        if mode == "BUS":
+                            lane_name = lane_info.get("busNo")
+                        elif mode == "SUBWAY":
+                            lane_name = lane_info.get("subwayName")
+                            if not lane_name:
+                                subway_code = lane_info.get("subwayCode")
+                                if subway_code:
+                                    lane_name = f"{subway_code}호선"
+                        
+                    steps.append(RouteStep(
+                        type=mode,
+                        distance=sub_path.get("distance", 0),
+                        duration=sub_path.get("sectionTime", 0),
+                        name=lane_name,
+                        start_name=sub_path.get("startName"),
+                        end_name=sub_path.get("endName"),
+                        polyline=segment_polyline
+                    ))
+
+                parsed_routes.append(RouteOption(
+                    mode="TRANSIT",
+                    duration=route_info.get("totalTime", 0),
+                    distance=route_info.get("totalDistance", 0),
+                    fare=route_info.get("payment", 0),
+                    steps=steps,
+                ))
+            return parsed_routes
         except httpx.HTTPStatusError as e:
-            logging.error(f"Kakao API request failed: {e.response.status_code} - {e.response.text}")
+            logging.error(f"ODsay API 요청 실패: {e.response.status_code} - {e.response.text}")
             return None
         except Exception as e:
-            logging.error(f"An unexpected error occurred during Kakao API call: {e}")
+            logging.error(f"ODsay API 처리 중 예외 발생: {e}")
             return None
 
-@app.post("/route/optimized", response_model=RouteResponse)
+
+@app.post("/route/optimized", response_model=List[RouteOption])
 async def get_optimized_route(request: RouteRequest, db: Session = Depends(get_db)):
-    if not MAP_API_KEY:
-        raise HTTPException(status_code=500, detail="MAP_API_KEY is not configured on the server.")
-
-    # 1. 카카오 API로 대중교통 경로 조회
-    kakao_data = await get_kakao_directions(request.start_lon, request.start_lat, request.end_lon, request.end_lat, MAP_API_KEY)
-    
-    if not kakao_data or not kakao_data.get("routes"):
-        raise HTTPException(status_code=503, detail="Could not retrieve route from external API.")
-
-    # 2. 대중교통 승하차 지점 좌표 추출
-    sections = kakao_data["routes"][0].get("sections", [])
-    # 'mode'가 'BUS' 또는 'SUBWAY'인 section만 대중교통 구간으로 간주
-    transit_sections = [s for s in sections if s.get("mode") in ["BUS", "SUBWAY"]]
-    
-    if not transit_sections:
-        # 대중교통 구간이 없는 경우 (도보 전용 경로 등)
-        start_station = find_nearest_station(request.start_lat, request.start_lon, db)
-        end_station = find_nearest_station(request.end_lat, request.end_lon, db)
-        if not start_station or not end_station:
-            raise HTTPException(status_code=404, detail="Could not find any nearby stations for this walking route.")
-        
-        # 이 경우, first_mile에 전체 구간의 대여소 정보를 담아 응답
-        segment = RouteSegment(start_station=start_station, end_station=end_station)
-        return RouteResponse(
-            message="This is a walking-only route. Found nearest stations for the whole journey.",
-            path=sections,
-            first_mile=segment
-        )
-
-    # 대중교통 시작 지점과 끝 지점 좌표
-    transit_start_lon, transit_start_lat = transit_sections[0]["guides"][0]["x"], transit_sections[0]["guides"][0]["y"]
-    last_transit_section_guides = transit_sections[-1]["guides"]
-    transit_end_lon, transit_end_lat = last_transit_section_guides[-1]["x"], last_transit_section_guides[-1]["y"]
-
-    # 3. First-mile 및 Last-mile 대여소 찾기
-    # First-mile: 사용자 출발지 -> 대중교통 승차지
-    fm_start_station = find_nearest_station(request.start_lat, request.start_lon, db)
-    fm_end_station = find_nearest_station(transit_start_lat, transit_start_lon, db)
-    first_mile_segment = RouteSegment(start_station=fm_start_station, end_station=fm_end_station)
-
-    # Last-mile: 대중교통 하차지 -> 최종 목적지
-    lm_start_station = find_nearest_station(transit_end_lat, transit_end_lon, db)
-    lm_end_station = find_nearest_station(request.end_lat, request.end_lon, db)
-    last_mile_segment = RouteSegment(start_station=lm_start_station, end_station=lm_end_station)
-
-    return RouteResponse(
-        message="Successfully found nearest stations for first and last mile of the transit route.",
-        path=sections, # 카카오가 제공한 전체 경로 정보
-        first_mile=first_mile_segment,
-        last_mile=last_mile_segment
+    """
+    출발지부터 도착지까지의 최적 경로를 ODsay API를 통해 조회합니다.
+    현재는 대중교통 경로만 제공합니다.
+    """
+    transit_routes = await get_odsay_public_transit_route(
+        sx=request.start_lon,
+        sy=request.start_lat,
+        ex=request.end_lon,
+        ey=request.end_lat,
     )
+    if transit_routes is None:
+        raise HTTPException(status_code=503, detail="외부 길찾기 API 호출에 실패했습니다.")
+    
+    # TODO: 자전거 경로, 따릉이+대중교통 결합 경로 로직 추가
+    return transit_routes
 
 @app.get("/stations/realtime", response_model=List[StationRealtime])
 def get_realtime_stations(

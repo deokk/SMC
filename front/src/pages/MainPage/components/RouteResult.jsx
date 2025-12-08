@@ -43,8 +43,18 @@ export default function RouteResult({ routes, isOpen, onBack }) {
           description: "광진경찰서",
           lines: ["광진04", "광진03"],
           details: [
-            { line: "광진04", time: "2분", stations: "1정류장", status: "보통" },
-            { line: "광진03", time: "11분", stations: "13정류장", status: "여유" },
+            {
+              line: "광진04",
+              time: "2분",
+              stations: "1정류장",
+              status: "보통",
+            },
+            {
+              line: "광진03",
+              time: "11분",
+              stations: "13정류장",
+              status: "여유",
+            },
           ],
         },
         {
@@ -60,7 +70,12 @@ export default function RouteResult({ routes, isOpen, onBack }) {
       totalTime: 28,
       distance: 2.1,
       steps: [
-        { type: "walking", time: 28, distance: 2.1, description: "도보로 이동" },
+        {
+          type: "walking",
+          time: 28,
+          distance: 2.1,
+          description: "도보로 이동",
+        },
       ],
     },
     bike: {
@@ -74,10 +89,16 @@ export default function RouteResult({ routes, isOpen, onBack }) {
 
   if (selectedMode === "transit") {
     const details = modeDetails.transit;
-    const totalLength = details.walkingTime + details.transitTime + (details.waitTime || 0);
 
-    const walkingPercent = (details.walkingTime / totalLength) * 100;
-    const transitPercent = (details.transitTime / totalLength) * 100;
+    // 각 구간의 시간 계산
+    const beforeWalkingTime = 10;
+    const transitTime = 31;
+    const afterWalkingTime = 4;
+    const totalTime = beforeWalkingTime + transitTime + afterWalkingTime;
+
+    const beforeWalkingPercent = (beforeWalkingTime / totalTime) * 100;
+    const transitPercent = (transitTime / totalTime) * 100;
+    const afterWalkingPercent = (afterWalkingTime / totalTime) * 100;
 
     return (
       <div className="rr-container">
@@ -96,19 +117,33 @@ export default function RouteResult({ routes, isOpen, onBack }) {
         {/* 타임라인 바 */}
         <div className="rr-timelineBarContainer">
           <div className="rr-timelineBar">
+            {/* 도보 (전) */}
             <div
               className="rr-timelineSegment rr-timelineSegment--walking"
-              style={{ width: `${walkingPercent}%` }}
-              title={`도보 ${formatTime(details.walkingTime)}`}
+              style={{ width: `${beforeWalkingPercent}%` }}
+              title={`도보 ${formatTime(beforeWalkingTime)}`}
             >
-              <span className="rr-segmentLabel">{formatTime(details.walkingTime)}</span>
+              <span className="rr-segmentLabel">
+                {formatTime(beforeWalkingTime)}
+              </span>
             </div>
+            {/* 대중교통 */}
             <div
               className="rr-timelineSegment rr-timelineSegment--transit"
               style={{ width: `${transitPercent}%` }}
-              title={`대중교통 ${formatTime(details.transitTime)}`}
+              title={`대중교통 ${formatTime(transitTime)}`}
             >
-              <span className="rr-segmentLabel">{formatTime(details.transitTime)}</span>
+              <span className="rr-segmentLabel">{formatTime(transitTime)}</span>
+            </div>
+            {/* 도보 (후) */}
+            <div
+              className="rr-timelineSegment rr-timelineSegment--walking"
+              style={{ width: `${afterWalkingPercent}%` }}
+              title={`도보 ${formatTime(afterWalkingTime)}`}
+            >
+              <span className="rr-segmentLabel">
+                {formatTime(afterWalkingTime)}
+              </span>
             </div>
           </div>
         </div>
@@ -127,7 +162,9 @@ export default function RouteResult({ routes, isOpen, onBack }) {
                     {step.type === "walking" && "도보"}
                     {step.type === "transit" && "대중교통"}
                   </span>
-                  <span className="rr-stepDuration">{formatTime(step.time)}</span>
+                  <span className="rr-stepDuration">
+                    {formatTime(step.time)}
+                  </span>
                 </div>
                 <div className="rr-stepLocation">{step.description}</div>
 
@@ -146,8 +183,14 @@ export default function RouteResult({ routes, isOpen, onBack }) {
                         <span className="rr-lineIcon">🚌</span>
                         <span className="rr-lineName">{detail.line}</span>
                         <span className="rr-lineTime">{detail.time}</span>
-                        <span className="rr-lineStations">{detail.stations}</span>
-                        <span className={`rr-lineStatus rr-lineStatus--${detail.status === "보통" ? "normal" : "comfort"}`}>
+                        <span className="rr-lineStations">
+                          {detail.stations}
+                        </span>
+                        <span
+                          className={`rr-lineStatus rr-lineStatus--${
+                            detail.status === "보통" ? "normal" : "comfort"
+                          }`}
+                        >
                           {detail.status}
                         </span>
                       </div>
