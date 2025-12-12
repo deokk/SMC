@@ -122,21 +122,63 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
 
 
 
-  // 1. 지도 생성 (변경 없음)
+        // 1. 지도 생성 (타이밍 문제 해결)
 
-  useEffect(() => {
 
-    if (!sdkReady || !containerRef.current || mapRef.current) return;
 
-    window.kakao.maps.load(() => {
+        useEffect(() => {
 
-      const center = new window.kakao.maps.LatLng(37.5408, 127.0793);
 
-      mapRef.current = new window.kakao.maps.Map(containerRef.current, { center, level: 5 });
 
-    });
+          if (!sdkReady || !containerRef.current || mapRef.current) return;
 
-  }, [sdkReady]);
+
+
+          
+
+
+
+          // kakao.maps.load는 스크립트가 로드되고 모든 API를 사용할 수 있을 때 콜백을 실행하므로,
+
+
+
+          // 타이밍 이슈를 해결할 수 있는 가장 안정적인 방법입니다.
+
+
+
+          window.kakao.maps.load(() => {
+
+
+
+            const center = new window.kakao.maps.LatLng(37.5408, 127.0793);
+
+
+
+                        mapRef.current = new window.kakao.maps.Map(containerRef.current, { 
+
+
+
+                          center, 
+
+
+
+                          level: 5,
+
+
+
+                          draggable: true // 드래그 기능 강제 활성화
+
+
+
+                        });
+
+
+
+                      });
+
+
+
+                    }, [sdkReady]); // sdkReady가 true가 되면 이 효과를 실행합니다.
 
 
 

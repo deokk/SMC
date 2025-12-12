@@ -214,6 +214,7 @@
 .mp-map{
   flex:1;
   padding: 0 0 0;
+  min-height: 0; /* Fix for flexbox child height calculation */
 }
 
 .mp-mapInner{
@@ -325,13 +326,47 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
+  width: 420px; /* Fix: Use explicit width instead of 100% */
+  max-width: 100%; /* Ensures it doesn't overflow viewport */
   height: 100%;
-  max-width: 420px; /* Adjust as needed for desktop view */
   background: var(--mp-bg);
   z-index: 10;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.15);
   border-right: 1px solid var(--mp-border);
-  pointer-events: auto; /* Re-enables pointer events for the overlay content */
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.mp-detail-panel-container {
+  /* This class is only used on mobile, so styles are inside media query */
+}
+
+/* For Mobile Screens */
+@media (max-width: 768px) {
+  /* Route list overlay takes full screen */
+  .mp-routeOverlay {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    box-shadow: none;
+  }
+
+  /* Container for the top detail panel on mobile */
+  .mp-detail-panel-container {
+    padding: 0 16px 10px;
+    max-height: 375px; /* 250px의 1.5배 */
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* For Mobile Screens */
+@media (max-width: 768px) {
+  .mp-routeOverlay {
+    max-width: 100%;
+    border-right: none;
+    box-shadow: none;
+  }
 }
 

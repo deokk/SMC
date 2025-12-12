@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom"; // Import useNavigate
+import { useOutletContext } from "react-router-dom";
 import KaKaoMap from "../../components/KaKaoMap";
 import Header from "./components/Header";
 import RouteCard from "./components/RouteCard";
 import TimeCard from "./components/TimeCard";
 import TimePickerModal from "./components/TimePickerModal";
 import RouteResult from "./components/RouteResult";
-import SideMenu from "../../components/SideMenu"; // SideMenu import
+import RouteDetailPanel from "./components/RouteDetailPanel";
+import SideMenu from "../../components/SideMenu";
+import useMediaQuery from "../../hooks/useMediaQuery";
 import "./MainPage.css";
 
 const formatCurrentTime = () => {
@@ -84,14 +86,13 @@ export default function MainPage() {
     selectedRoute,
     setSelectedRoute,
   } = useOutletContext();
-  const navigate = useNavigate(); // Initialize navigate
+  
+  const isMobile = useMediaQuery('(max-width: 768px)'); // 화면 크기 감지
 
   const [timeText, setTimeText] = useState(formatCurrentTime());
   const [isTimeOpen, setIsTimeOpen] = useState(false);
   const [stations, setStations] = useState([]);
-  const [isSideMenuOpen, setIsSideMenuOpen] = useState(false); // SideMenu state
-  
-  // ... (prediction states remain the same)
+  const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
   const [isPredictionMode, setIsPredictionMode] = useState(false);
   const [predictionData, setPredictionData] = useState({});
   const [isPredicting, setIsPredicting] = useState(false);
@@ -104,12 +105,10 @@ export default function MainPage() {
   }, []);
 
   const handleSearch = async () => {
-    // ... (handleSearch logic remains the same, but with updates)
     if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services || !window.kakao.maps.services.Geocoder) {
       alert("지도 서비스(주소 검색)가 로드되지 않았습니다. 잠시 후 다시 시도해주세요.");
       return;
     }
-
     const getCoords = (address) => {
       return new Promise((resolve, reject) => {
         const places = new window.kakao.maps.services.Places();
@@ -129,34 +128,25 @@ export default function MainPage() {
         });
       });
     };
-
     try {
-      // Promise.all을 사용하지 않고 순차적으로 호출하여 API 에러 방지
       const startCoords = await getCoords(from);
       const endCoords = await getCoords(to);
-
       const response = await fetch("http://127.0.0.1:8000/route/optimized", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          start_lat: parseFloat(startCoords.lat),
-          start_lon: parseFloat(startCoords.lon),
-          end_lat: parseFloat(endCoords.lat),
-          end_lon: parseFloat(endCoords.lon),
+          start_lat: parseFloat(startCoords.lat), start_lon: parseFloat(startCoords.lon),
+          end_lat: parseFloat(endCoords.lat), end_lon: parseFloat(endCoords.lon),
         }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || "경로 탐색 API 서버에 문제가 발생했습니다.");
       }
-
       const routeData = await response.json();
       setRoutes(routeData);
-setIsRoutesOpen(true);
-      setSelectedRoute(null); // 새 검색 시 폴리라인 초기화
+      setIsRoutesOpen(true);
+      setSelectedRoute(null);
     } catch (error) {
       console.error("경로 검색 실패:", error);
       alert(error.message || "경로 검색 중 오류가 발생했습니다.");
@@ -164,15 +154,13 @@ setIsRoutesOpen(true);
   };
 
   const handleRouteSelect = (route) => {
-    if (selectedRoute === route) {
+    if (selectedRoute && selectedRoute === route) {
       setSelectedRoute(null);
     } else {
       setSelectedRoute(route);
-      navigate("/route-detail");
     }
   };
 
-  // ... (handleTimeConfirm and other helpers remain the same)
   const handleTimeConfirm = useCallback(async (value) => {
     setTimeText(value.text);
     closeTimeModal();
@@ -191,7 +179,7 @@ setIsRoutesOpen(true);
     setIsPredictionMode(true);
     try {
       const results = await Promise.all(stations.map(station =>
-        fetch(`http://localhost:8000/stations/${station.station_id}/predict?n_minutes=${diffMinutes}`)
+        fetch(`http://localhost:8000/predict/hybrid/${station.station_id}?n_minutes=${diffMinutes}`)
           .then(res => res.json())
           .catch(() => null)
       ));
@@ -210,18 +198,29 @@ setIsRoutesOpen(true);
 
   const openTimeModal = () => setIsTimeOpen(true);
   const closeTimeModal = () => setIsTimeOpen(false);
-  const openSideMenu = () => setIsSideMenuOpen(true); // Open SideMenu
-  const closeSideMenu = () => setIsSideMenuOpen(false); // Close SideMenu
+  const openSideMenu = () => setIsSideMenuOpen(true);
+  const closeSideMenu = () => setIsSideMenuOpen(false);
   const initialTimeValue = useMemo(() => parseTimeText(timeText), [timeText]);
 
   return (
     <div className="mp-root">
       <div className="mp-top">
         <Header />
-        <section className="mp-cards">
-          <RouteCard from={from} setFrom={setFrom} to={to} setTo={setTo} />
-          <TimeCard timeText={timeText} setTimeText={setTimeText} openTimeModal={openTimeModal} />
-        </section>
+        
+        {/* 모바일이고 경로 선택 시, 상세 패널을 여기에 렌더링 */}
+        {isMobile && selectedRoute && (
+          <div className="mp-detail-panel-container">
+            <RouteDetailPanel route={selectedRoute} onBack={() => setSelectedRoute(null)} />
+          </div>
+        )}
+        
+        {/* 데스크탑이거나, 모바일에서 경로 미선택 시, 검색 카드 렌더링 */}
+        {(!isMobile || !selectedRoute) && (
+          <section className="mp-cards">
+            <RouteCard from={from} setFrom={setFrom} to={to} setTo={setTo} />
+            <TimeCard timeText={timeText} setTimeText={setTimeText} openTimeModal={openTimeModal} />
+          </section>
+        )}
       </div>
 
       <main className="mp-map" aria-label="map area">
@@ -234,18 +233,29 @@ setIsRoutesOpen(true);
           />
 
           {isRoutesOpen && (
-            <div className="mp-routeOverlay">
-              <RouteResult
-                routes={routes}
-                selectedRoute={selectedRoute}
-                isOpen={isRoutesOpen}
-                onBack={() => {
-                  setIsRoutesOpen(false);
-                  setSelectedRoute(null); // 뒤로가기 시 폴리라인 초기화
-                }}
-                onRouteSelect={handleRouteSelect}
-              />
-            </div>
+            // 모바일에서는 경로가 선택되면 오버레이를 숨김 (상세 정보가 상단에 있으므로)
+            (!isMobile || !selectedRoute) && (
+              <div className="mp-routeOverlay">
+                {/* 데스크탑에서는 상세 정보와 목록 전환 */}
+                {!isMobile && selectedRoute ? (
+                  <RouteDetailPanel
+                    route={selectedRoute}
+                    onBack={() => setSelectedRoute(null)}
+                  />
+                ) : (
+                  <RouteResult
+                    routes={routes}
+                    selectedRoute={selectedRoute}
+                    isOpen={isRoutesOpen}
+                    onBack={() => {
+                      setIsRoutesOpen(false);
+                      setSelectedRoute(null);
+                    }}
+                    onRouteSelect={handleRouteSelect}
+                  />
+                )}
+              </div>
+            )
           )}
         </div>
       </main>
@@ -256,7 +266,7 @@ setIsRoutesOpen(true);
           className="mp-iconBtn"
           type="button"
           aria-label="메뉴"
-          onClick={openSideMenu} // SideMenu open button
+          onClick={openSideMenu}
         >
           <img src="/list.svg" alt="메뉴" width="23" height="15" />
         </button>
