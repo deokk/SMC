@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import useKakaoLoader from "../../../hooks/useKakaoLoader.js";
+import useKakaoLoader from "../../../hooks/useKaKaoLoader.js";
 import "./LocationSearchModal.css";
 
 export default function LocationSearchModal({
@@ -16,10 +16,19 @@ export default function LocationSearchModal({
   const [searchResults, setSearchResults] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
 
+  // 모달이 열릴 때 input에 포커스
+  useEffect(() => {
+    if (isOpen) {
+      // searchResults와 searchInput을 초기화
+      setSearchResults([]);
+      setSearchInput("");
+      setSelectedMarker(null);
+    }
+  }, [isOpen]);
+
   // 지도 초기화
   useEffect(() => {
     if (!isOpen || !sdkReady || !window.kakao?.maps) return;
-
     if (mapRef.current) return;
 
     window.kakao.maps.load(() => {
@@ -33,8 +42,10 @@ export default function LocationSearchModal({
 
   // 장소 검색
   const handleSearch = (keyword) => {
-    if (!keyword.trim() || !window.kakao?.maps) return;
-
+    if (!keyword.trim() || !window.kakao?.maps) {
+      setSearchResults([]);
+      return;
+    }
     const ps = new window.kakao.maps.services.Places();
     ps.keywordSearch(keyword, (data, status) => {
       if (status === window.kakao.maps.services.Status.OK) {
@@ -55,12 +66,10 @@ export default function LocationSearchModal({
 
     mapRef.current.setCenter(pos);
 
-    // 기존 마커 제거
     if (markerRef.current) {
       markerRef.current.setMap(null);
     }
 
-    // 새 마커 추가
     markerRef.current = new window.kakao.maps.Marker({
       position: pos,
       map: mapRef.current,
@@ -103,6 +112,7 @@ export default function LocationSearchModal({
               setSearchInput(e.target.value);
               handleSearch(e.target.value);
             }}
+            autoFocus
             aria-label="장소 검색"
           />
         </div>

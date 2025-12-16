@@ -42,7 +42,7 @@ export default function RouteResult({ routes, isOpen, onBack, onRouteSelect, sel
       <h3 className="rr-title">추천 경로</h3>
       <div className="rr-list">
         {routes.map((route, index) => {
-          const mainSteps = route.steps.filter(s => s.type !== 'WALK');
+          const mainSteps = route.steps.filter(s => s.type !== 'WALK' && s.type !== 'BICYCLE');
 
           return (
             <button 
