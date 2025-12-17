@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-import MainPage from "./pages/MainPage/MainPage";
-
-export default function App() {
-  return <MainPage />;
-=======
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./pages/MainLayout";
 import MainPage from "./pages/MainPage/MainPage";
@@ -22,5 +16,4 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
->>>>>>> backend
 }
