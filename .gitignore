@@ -163,3 +163,7 @@ station_list.txt
 
 # Batch files
 run_collector.bat
+
+# Vite cache
+frontend/.vite/
+frontend/node_modules/

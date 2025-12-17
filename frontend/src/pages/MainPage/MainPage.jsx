@@ -94,7 +94,11 @@ export default function MainPage() {
 
       <nav className="mp-bottom" aria-label="bottom navigation">
         <button className="mp-iconBtn" type="button" aria-label="메뉴">
-          P
+          <img
+            src="/list.svg"
+            alt="메뉴"
+            style={{ width: "24px", height: "24px" }}
+          />
         </button>
 
         <button
