@@ -112,3 +112,30 @@
   font-size: 20px;
   color: #bbb;
 }
+
+.sm-divider {
+  height: 1px;
+  background-color: #f0f0f0;
+  margin: 12px 20px;
+}
+
+/* Link 태그 스타일 초기화 */
+a.sm-item, a.sm-item:visited, a.sm-item:hover, a.sm-item:active {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* button 태그 스타일 초기화 */
+button.sm-item {
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit; /* 부모 폰트 상속 */
+}
+
+.sm-item.active {
+  background-color: #e0f2f7; /* Light blue background to indicate active state */
+}
+
+

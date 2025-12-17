@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
 
-const useGeolocation = (riderId, isActive = false) => {
+const useGeolocation = (riderId, isSharingLocation = false) => {
   const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let watchId = null;
 
-    if (isActive) {
+    if (isSharingLocation) { // Use isSharingLocation here
       const handleSuccess = (position) => {
         const { latitude, longitude } = position.coords;
-        const newLocation = { latitude, longitude };
+        const newLocation = { latitude, longitude, is_sharing: isSharingLocation }; // Include is_sharing
         setLocation(newLocation);
         
         if (riderId) {
-          fetch(`http://127.0.0.1:8000/riders/${riderId}/location`, {
+          fetch(`/riders/${riderId}/location`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newLocation),
@@ -39,6 +39,14 @@ const useGeolocation = (riderId, isActive = false) => {
       // GPS가 꺼지면 위치와 에러를 초기화
       setLocation(null);
       setError(null);
+      // When sharing is turned off, also send a final update to backend to set is_sharing to false
+      if (riderId) {
+        fetch(`/riders/${riderId}/location`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude: location?.latitude || 0, longitude: location?.longitude || 0, is_sharing: false }), // Send last known or default coords
+        }).catch(err => console.error("위치 공유 비활성화 전송 실패:", err));
+      }
     }
 
     return () => {
@@ -46,7 +54,7 @@ const useGeolocation = (riderId, isActive = false) => {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [riderId, isActive]);
+  }, [riderId, isSharingLocation]); // Use isSharingLocation here
 
   return { location, error };
 };

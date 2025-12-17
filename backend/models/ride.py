@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
-from .user import Base  # 'user' 모델에서 Base를 가져옵니다.
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from db.database import Base # 'user' 모델에서 Base를 가져옵니다.
 
 class UserRideHistory(Base):
     """

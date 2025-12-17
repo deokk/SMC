@@ -1,0 +1,61 @@
+.station-info-box {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 350px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #eee;
+}
+
+.sib-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #888;
+  line-height: 1;
+}
+
+.sib-title {
+  font-size: 18px;
+  font-weight: 700;
+  padding-right: 20px; /* To avoid overlap with close button */
+}
+
+.sib-content {
+  font-size: 14px;
+  color: #333;
+}
+
+.sib-footer {
+  margin-top: 8px;
+}
+
+.sib-history-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sib-history-btn:hover {
+  background-color: #0056b3;
+}

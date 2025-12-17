@@ -35,7 +35,13 @@ def get_password_hash(password: str) -> str:
     일반 텍스트 비밀번호를 해시 처리하여 반환합니다.
     Bcrypt는 최대 72바이트까지 처리하므로, 그 길이에 맞게 자릅니다.
     """
-    return pwd_context.hash(password.encode('utf-8')[:72])
+    password_bytes = password.encode('utf-8')
+    # Truncate to 72 bytes
+    truncated_password_bytes = password_bytes[:72]
+    # Generate a salt and hash the password
+    hashed_bytes = bcrypt.hashpw(truncated_password_bytes, bcrypt.gensalt())
+    # Return the hashed password as a string
+    return hashed_bytes.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
 

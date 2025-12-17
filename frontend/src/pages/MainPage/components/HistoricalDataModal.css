@@ -1,0 +1,116 @@
+.hdm-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.hdm-modal {
+  background-color: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hdm-header {
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  position: relative;
+}
+
+.hdm-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.hdm-close-btn {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #888;
+}
+
+.hdm-tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+}
+
+.hdm-tab {
+  flex: 1;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #868e96;
+  border-bottom: 2px solid transparent;
+}
+
+.hdm-tab.active {
+  color: #007bff;
+  font-weight: 600;
+  border-bottom-color: #007bff;
+}
+
+.hdm-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.hdm-message {
+  text-align: center;
+  color: #888;
+  padding: 20px;
+}
+
+.hdm-error {
+    color: #e74c3c;
+}
+
+.hdm-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.hdm-hour {
+  width: 40px;
+  color: #888;
+}
+
+.hdm-bar-container {
+  flex: 1;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  height: 16px;
+  margin: 0 8px;
+}
+
+.hdm-bar {
+  background-color: #007bff;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
+}
+
+.hdm-value {
+  width: 40px;
+  text-align: right;
+  font-weight: 600;
+}

@@ -1,10 +1,12 @@
 from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-
-# SQLAlchemy의 기본 클래스 생성
-Base = declarative_base()
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+# Use the central Base from the database module
+from db.database import Base
 
 class User(Base):
     """
@@ -18,6 +20,21 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 내가 친구로 추가한 관계 목록
+    friends = relationship(
+        "Friend", 
+        foreign_keys="Friend.user_id", 
+        back_populates="user", 
+        cascade="all, delete-orphan"
+    )
+    # 나를 친구로 추가한 관계 목록
+    friend_of = relationship(
+        "Friend", 
+        foreign_keys="Friend.friend_id", 
+        back_populates="friend_user", 
+        cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"

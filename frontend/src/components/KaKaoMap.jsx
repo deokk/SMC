@@ -19,7 +19,7 @@ const SUBWAY_LINE_COLORS = {
   "default": "#A1A1A1"
 };
 
-export default function KakaoMap({ stations, selectedRoute, isPredictionMode, predictionData, riderToTrack, myCurrentLocation, nearbyStations }) {
+export default function KakaoMap({ stations, selectedRoute, isPredictionMode, predictionData, riderToTrack, myCurrentLocation, nearbyStations, onMarkerClick, isFriendLocationMode, friendLocations }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]); // 모든 대여소 마커 (일반 + 주변)
@@ -28,6 +28,9 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
   const startEndMarkersRef = useRef([]);
   const riderMarkerRef = useRef(null);
   const myLocationMarkerRef = useRef(null);
+  const friendMarkersRef = useRef([]); // New ref for friend markers
+  const friendOverlaysRef = useRef([]); // New ref for friend overlays
+  const initialFriendBoundsSetRef = useRef(false); // New ref to track initial bounds setting
   const sdkReady = useKakaoLoader();
 
   const { riderLocation } = useRiderTracking(riderToTrack);
@@ -35,6 +38,7 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
   const START_MARKER_IMAGE_SRC = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="%23007BFF" stroke="%23FFFFFF" stroke-width="2"/><text x="15" y="19" font-family="Arial" font-size="10" fill="%23FFFFFF" text-anchor="middle" font-weight="bold">출발</text></svg>';
   const END_MARKER_IMAGE_SRC = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="%23DC3545" stroke="%23FFFFFF" stroke-width="2"/><text x="15" y="19" font-family="Arial" font-size="10" fill="%23FFFFFF" text-anchor="middle" font-weight="bold">도착</text></svg>';
   const MY_LOCATION_MARKER_IMAGE_SRC = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="%2300A8FF" stroke="%23FFFFFF" stroke-width="2"/></svg>';
+  const FRIEND_MARKER_IMAGE_SRC = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%23FFD700" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.38 0 2.5 1.12 2.5 2.5S13.38 10.5 12 10.5 9.5 9.38 9.5 8 10.62 5 12 5zm0 14.5c-2.7 0-5.8 1.22-6.5 2H18.5c-.7-.78-3.8-2-6.5-2z"/></svg>';
   
   useEffect(() => {
     if (!sdkReady || !containerRef.current || mapRef.current) return;
@@ -47,7 +51,7 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
   // 대여소 마커 및 오버레이를 그리는 통합 useEffect
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.kakao || !stations) return;
+    if (!map || !window.kakao) return;
 
     // 항상 기존 마커와 오버레이는 모두 지웁니다.
     markersRef.current.forEach((marker) => marker.setMap(null));
@@ -55,11 +59,15 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
     markersRef.current = [];
     overlaysRef.current = [];
 
+    if (isFriendLocationMode) {
+        // 친구 위치 모드일 때는 대여소 마커를 그리지 않습니다.
+        return;
+    }
+
     // 어떤 대여소 목록을 그릴지 결정
-    // 경로가 선택되면 '주변 대여소'만, 그렇지 않으면 '전체 대여소'를 그립니다.
     const stationsToDraw = selectedRoute ? nearbyStations : stations;
 
-    if (!stationsToDraw) return;
+    if (!stationsToDraw || stationsToDraw.length === 0) return;
     
     stationsToDraw.forEach((station) => {
       if (station.latitude == null || station.longitude == null) return;
@@ -70,19 +78,26 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
       markersRef.current.push(marker);
 
       // 개수 오버레이는 항상 표시
-      const count = isPredictionMode ? predictionData[station.station_id] ?? '?' : station.available_bikes;
-      const content = document.createElement("div");
-      content.className = isPredictionMode ? 'overlay-content prediction' : 'overlay-content';
-      content.innerHTML = `${count}`;
+      const currentBikes = isPredictionMode ? predictionData[station.station_id] ?? '?' : station.available_bikes;
+      const overlayContent = document.createElement("div");
+      overlayContent.className = isPredictionMode ? 'overlay-content prediction' : 'overlay-content';
+      overlayContent.innerHTML = `${currentBikes}`;
     
       const customOverlay = new window.kakao.maps.CustomOverlay({
         map: map,
         position: markerPosition,
-        content: content,
+        content: overlayContent,
         yAnchor: 2.2,
         zIndex: 3,
       });
       overlaysRef.current.push(customOverlay);
+
+      // 마커 클릭 시 상위 컴포넌트로 이벤트 전달
+      kakao.maps.event.addListener(marker, 'click', function() {
+        if (onMarkerClick) {
+          onMarkerClick(station);
+        }
+      });
     });
 
     // 경로가 없을 때만 전체 대여소를 기준으로 지도를 확대/축소
@@ -95,7 +110,74 @@ export default function KakaoMap({ stations, selectedRoute, isPredictionMode, pr
       });
       if (!bounds.isEmpty()) map.setBounds(bounds);
     }
-  }, [stations, nearbyStations, selectedRoute, isPredictionMode, predictionData]);
+  }, [stations, nearbyStations, selectedRoute, isPredictionMode, predictionData, onMarkerClick, isFriendLocationMode]);
+
+  // 친구 위치 마커 및 오버레이를 그리는 useEffect (새로 추가)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.kakao) return;
+
+    // 항상 기존 친구 마커와 오버레이는 모두 지웁니다.
+    friendMarkersRef.current.forEach(marker => marker.setMap(null));
+    friendOverlaysRef.current.forEach(overlay => overlay.setMap(null));
+    friendMarkersRef.current = [];
+    friendOverlaysRef.current = [];
+
+    if (!isFriendLocationMode || !friendLocations || friendLocations.length === 0) {
+      // 친구 위치 모드가 아니거나 친구 위치 데이터가 없으면 그리지 않습니다.
+      // 모드가 꺼지면 initialFriendBoundsSetRef를 리셋하여 다음 켜질 때 다시 중앙에 오도록 합니다.
+      if (!isFriendLocationMode) {
+        initialFriendBoundsSetRef.current = false;
+      }
+      return;
+    }
+
+    const friendMarkerImage = new window.kakao.maps.MarkerImage(FRIEND_MARKER_IMAGE_SRC, new window.kakao.maps.Size(24, 24), { offset: new window.kakao.maps.Point(12, 24) });
+
+    friendLocations.forEach(friend => {
+      if (friend.latitude == null || friend.longitude == null) return;
+
+      const markerPosition = new window.kakao.maps.LatLng(friend.latitude, friend.longitude);
+      const marker = new window.kakao.maps.Marker({
+        position: markerPosition,
+        image: friendMarkerImage,
+        title: friend.username,
+        zIndex: 5,
+      });
+      marker.setMap(map);
+      friendMarkersRef.current.push(marker);
+
+      // 친구 이름 오버레이
+      const overlayContent = document.createElement("div");
+      overlayContent.className = 'overlay-content friend-name'; // CSS 클래스 추가 필요
+      overlayContent.innerHTML = `<span>${friend.username}</span>`;
+      
+      const customOverlay = new window.kakao.maps.CustomOverlay({
+        map: map,
+        position: markerPosition,
+        content: overlayContent,
+        yAnchor: 2.2,
+        zIndex: 4,
+      });
+      friendOverlaysRef.current.push(customOverlay);
+    });
+
+    // 친구 위치 기준으로 지도를 확대/축소 (처음 활성화될 때만)
+    if (!initialFriendBoundsSetRef.current && friendLocations.length > 0) {
+      const bounds = new window.kakao.maps.LatLngBounds();
+      friendLocations.forEach((friend) => {
+        if (friend.latitude !== undefined && friend.longitude !== undefined) {
+           bounds.extend(new window.kakao.maps.LatLng(friend.latitude, friend.longitude));
+        }
+      });
+      if (!bounds.isEmpty()) {
+        map.setBounds(bounds);
+        initialFriendBoundsSetRef.current = true; // Mark as set
+      }
+    }
+
+  }, [isFriendLocationMode, friendLocations]);
+
 
   // 경로 폴리라인을 그리는 useEffect
   useEffect(() => {

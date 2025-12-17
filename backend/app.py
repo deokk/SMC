@@ -44,8 +44,9 @@ from backend.schemas.user_schemas import (
     RouteSegment
 )
 from backend.schemas.ride_schemas import RideStartRequest, RideEndRequest, RideResponse
-from backend.crud import ride_crud
+from backend.crud import ride_crud, friend_crud
 from backend.models.ride import UserRideHistory # For type hinting and ORM operations
+from backend.schemas.friend_schemas import FriendCreate, FriendLocation
 
 
 # --- 모델 및 서비스 라이프사이클 관리 ---
@@ -53,6 +54,7 @@ from backend.models.ride import UserRideHistory # For type hinting and ORM opera
 async def lifespan(app: FastAPI):
     print("🚀 서버 시작: 하이브리드 예측 모델을 로딩합니다...")
     db = SessionLocal()
+
     try:
         app.state.predictor = HybridPredictor(db)
         print("✅ 하이브리드 예측 서비스가 성공적으로 초기화되었습니다.")
@@ -104,6 +106,7 @@ class Token(BaseModel):
 class LocationUpdate(BaseModel):
     latitude: float = Field(..., example=37.5665)
     longitude: float = Field(..., example=126.9780)
+    is_sharing: bool = False # New field to indicate if user is sharing location
 
 # 네이버 지도 Path 컴포넌트에 맞는 좌표 모델
 class Coordinate(BaseModel):
@@ -287,7 +290,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.post("/riders/{rider_id}/location", status_code=204)
 async def update_rider_location(rider_id: str, location: LocationUpdate, redis_conn: redis.Redis = Depends(get_redis_conn)):
     key = f"rider_location:{rider_id}"
-    data = {"latitude": location.latitude, "longitude": location.longitude, "timestamp": datetime.now().isoformat()}
+    data = {
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "timestamp": datetime.now().isoformat(),
+        "is_sharing": location.is_sharing # Store the sharing status
+    }
     redis_conn.setex(key, timedelta(hours=1), json.dumps(data))
     return None
 
@@ -354,6 +362,67 @@ def end_ride(ride_request: RideEndRequest, db: Session = Depends(get_db), curren
 def get_my_ride_history(db: Session = Depends(get_db), current_user: User = Depends(security.get_current_user)):
     rides = ride_crud.get_rides_by_user(db, user_id=current_user.id)
     return [RideResponse.model_validate(ride) for ride in rides]
+
+@app.post("/friends", response_model=UserResponse)
+def add_friend(
+    friend_data: FriendCreate, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(security.get_current_user)
+):
+    friend_username = friend_data.friend_username
+    if current_user.username == friend_username:
+        raise HTTPException(status_code=400, detail="Cannot add yourself as a friend.")
+
+    friend_user = user_crud.get_user_by_username(db, username=friend_username)
+    if not friend_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    are_friends = friend_crud.check_if_friends(db, user_id=current_user.id, friend_id=friend_user.id)
+    if are_friends:
+        raise HTTPException(status_code=400, detail="This user is already your friend.")
+
+    try:
+        friend_crud.add_friend(db, user_id=current_user.id, friend_id=friend_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return friend_user
+
+@app.get("/friends", response_model=List[UserResponse])
+def get_friends(
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(security.get_current_user)
+):
+    friends = friend_crud.get_friends(db, user_id=current_user.id)
+    return friends
+
+@app.get("/friends/locations", response_model=List[FriendLocation])
+async def get_friends_locations(
+    db: Session = Depends(get_db),
+    redis_conn: redis.Redis = Depends(get_redis_conn),
+    current_user: User = Depends(security.get_current_user)
+):
+    friends = friend_crud.get_friends(db, user_id=current_user.id)
+    friend_locations = []
+    
+    for friend in friends:
+        # Assuming rider_id for friends' tracking is their username
+        key = f"rider_location:{friend.username}"
+        data = redis_conn.get(key)
+        if data:
+            location_data = json.loads(data)
+            # Only include location if the user is actively sharing
+            if location_data.get("is_sharing", False): # Default to False if key not present
+                friend_locations.append(FriendLocation(
+                    username=friend.username,
+                    latitude=location_data["latitude"],
+                    longitude=location_data["longitude"],
+                    timestamp=datetime.fromisoformat(location_data["timestamp"])
+                ))
+            
+    return friend_locations
+
+
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """두 지점의 위도, 경도를 받아 km 단위로 거리를 반환합니다."""

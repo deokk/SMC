@@ -1,7 +1,59 @@
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useState } from "react";
+import AddFriendModal from "./AddFriendModal"; // Add this import
 import "./SideMenu.css";
 
-export default function SideMenu({ isOpen, onClose }) {
+export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, isFriendLocationMode, isSharingLocation, onToggleShareLocation }) {
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false); // New state
+
   if (!isOpen) return null;
+
+  const handleProtectedAction = (featureName) => {
+    if (!isAuthenticated) {
+      alert("로그인이 필요합니다.");
+      navigate("/login");
+      onClose();
+    } else {
+      // Placeholder for actual feature
+      alert(`${featureName} 기능은 현재 구현 중입니다.`);
+    }
+  };
+
+  const handleAddFriendClick = () => {
+    if (!isAuthenticated) {
+      handleProtectedAction('친구 추가'); // Use the protected action handler
+    } else {
+      setShowAddFriendModal(true); // Open the modal
+      onClose(); // Close the side menu
+    }
+  };
+
+  const handleFriendLocationClick = () => {
+    if (!isAuthenticated) {
+      handleProtectedAction('친구 위치');
+    } else {
+      onToggleFriendLocationMode(); // Toggle the mode
+      onClose(); // Now close the side menu immediately after toggling friend location
+    }
+  };
+  
+  const handleShareLocationClick = () => {
+    if (!isAuthenticated) {
+      handleProtectedAction('위치 공유');
+    } else {
+      onToggleShareLocation();
+      onClose(); // Close the side menu
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    onClose();
+    navigate('/'); // Navigate to home page after logout
+  };
 
   return (
     <>
@@ -18,31 +70,59 @@ export default function SideMenu({ isOpen, onClose }) {
         </div>
 
         <div className="sm-content">
-          <div className="sm-item">
+          <button 
+            className={`sm-item ${isSharingLocation ? 'active' : ''}`} // Add active class
+            onClick={handleShareLocationClick}
+          >
             <span className="sm-itemIcon">📍</span>
-            <span className="sm-itemLabel">위치 공유</span>
+            <span className="sm-itemLabel">{isSharingLocation ? '위치 공유 끄기' : '위치 공유'}</span> {/* Dynamic label */}
             <span className="sm-itemArrow">›</span>
-          </div>
+          </button>
 
-          <div className="sm-item">
+          <button 
+            className={`sm-item ${isFriendLocationMode ? 'active' : ''}`} // Add active class
+            onClick={handleFriendLocationClick}
+          >
             <span className="sm-itemIcon">✓</span>
-            <span className="sm-itemLabel">친구 위치</span>
+            <span className="sm-itemLabel">{isFriendLocationMode ? '친구 위치 끄기' : '친구 위치'}</span> {/* Dynamic label */}
             <span className="sm-itemArrow">›</span>
-          </div>
+          </button>
 
-          <div className="sm-item">
+          <button className="sm-item" onClick={handleAddFriendClick}>
             <span className="sm-itemIcon">👥</span>
             <span className="sm-itemLabel">친구 추가</span>
             <span className="sm-itemArrow">›</span>
-          </div>
+          </button>
 
-          <div className="sm-item">
+          <button className="sm-item" onClick={() => handleProtectedAction('AI 패턴 분석')}>
             <span className="sm-itemIcon">📋</span>
             <span className="sm-itemLabel">AI 패턴 분석</span>
             <span className="sm-itemArrow">›</span>
-          </div>
+          </button>
+          
+          <div className="sm-divider"></div>
+
+          {isAuthenticated ? (
+            <button className="sm-item" onClick={handleLogout}>
+              <span className="sm-itemIcon">🔒</span>
+              <span className="sm-itemLabel">로그아웃</span>
+            </button>
+          ) : (
+            <>
+              <Link to="/login" className="sm-item" onClick={onClose}>
+                <span className="sm-itemIcon">🔑</span>
+                <span className="sm-itemLabel">로그인</span>
+              </Link>
+              
+              <Link to="/register" className="sm-item" onClick={onClose}>
+                <span className="sm-itemIcon">👤</span>
+                <span className="sm-itemLabel">회원가입</span>
+              </Link>
+            </>
+          )}
         </div>
       </div>
+      {showAddFriendModal && <AddFriendModal onClose={() => setShowAddFriendModal(false)} />}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom"; // Add useNavigate
 import KaKaoMap from "../../components/KaKaoMap";
 import Header from "./components/Header";
 import RouteCard from "./components/RouteCard";
@@ -10,7 +10,12 @@ import RouteDetailPanel from "./components/RouteDetailPanel";
 import SideMenu from "../../components/SideMenu";
 import useMediaQuery from "../../hooks/useMediaQuery";
 import useGeolocation from "../../hooks/useGeolocation";
+import StationInfoBox from "./components/StationInfoBox";
+import HistoricalDataModal from "./components/HistoricalDataModal";
+import { useAuth } from "../../context/AuthContext"; // Import useAuth
 import "./MainPage.css";
+import "./components/StationInfoBox.css";
+import "./components/HistoricalDataModal.css";
 
 const formatCurrentTime = () => {
   const now = new Date();
@@ -69,6 +74,7 @@ export default function MainPage() {
     selectedRoute, setSelectedRoute,
   } = useOutletContext();
   
+  const navigate = useNavigate(); // For redirecting on auth error
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [timeText, setTimeText] = useState(formatCurrentTime());
   const [isTimeOpen, setIsTimeOpen] = useState(false);
@@ -80,23 +86,112 @@ export default function MainPage() {
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [nearbyStations, setNearbyStations] = useState([]);
   
-  const [isRiding, setIsRiding] = useState(false);
-  const [riderId, setRiderId] = useState("user123"); 
-  const { location: myLocation, error: geoError } = useGeolocation(riderId, isRiding);
+  const { isAuthenticated, token, username, logout } = useAuth(); // Use useAuth hook
+  const [isRiding, setIsRiding] = useState(false); // isRiding state is still for riding history, not location sharing
   
+  // My Location Sharing State
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const handleToggleShareLocation = useCallback(() => {
+    setIsSharingLocation(prevMode => !prevMode);
+  }, []);
+
+  const riderId = isAuthenticated && username ? username : "guest_user"; // Use authenticated username or guest
+  const { location: myLocation, error: geoError } = useGeolocation(riderId, isSharingLocation); // Use isSharingLocation here
+  
+  const [selectedStation, setSelectedStation] = useState(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
   const [searchMode, setSearchMode] = useState("multimodal"); // 'bicycle' or 'multimodal'
+
+  // Friend Location Mode States
+  const [isFriendLocationMode, setIsFriendLocationMode] = useState(false);
+  const [friendLocations, setFriendLocations] = useState([]);
+  const [isFetchingFriendLocations, setIsFetchingFriendLocations] = useState(false);
+
+  const handleMarkerClick = (station) => {
+    setSelectedStation(station);
+  };
+  
+  const handleShowHistory = () => {
+    setIsHistoryModalOpen(true);
+  };
+  
+  const handleCloseStationBox = () => {
+    setSelectedStation(null);
+  };
+
+  // Toggle Friend Location Mode
+  const handleToggleFriendLocationMode = useCallback(() => {
+    setIsFriendLocationMode(prevMode => !prevMode);
+    // Clear friend locations when turning off the mode
+    if (isFriendLocationMode) {
+      setFriendLocations([]);
+    }
+    // No need to close side menu here, it's done in SideMenu.jsx
+  }, [isFriendLocationMode]);
+
 
   useEffect(() => {
     if (geoError) alert(`위치 추적 에러: ${geoError}`);
   }, [geoError]);
 
   useEffect(() => {
-    fetch('http://localhost:8000/stations/realtime').then(res => res.json()).then(setStations).catch(err => console.error("Failed to fetch real-time stations:", err));
+    fetch('/stations/realtime').then(res => res.json()).then(setStations).catch(err => console.error("Failed to fetch real-time stations:", err));
   }, []);
+
+  // Effect for fetching friend locations
+  useEffect(() => {
+    let intervalId;
+    if (isFriendLocationMode && isAuthenticated && token) {
+      const fetchFriendLocations = async () => {
+        setIsFetchingFriendLocations(true);
+        try {
+          const response = await fetch('/friends/locations', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setFriendLocations(data);
+          } else if (response.status === 401) {
+            alert('세션이 만료되었습니다. 다시 로그인해주세요.');
+            logout(); // Log out if token is invalid
+            navigate('/login');
+          } else {
+            console.error("Failed to fetch friend locations:", response.status, response.statusText);
+            setFriendLocations([]); // Clear on error
+          }
+        } catch (error) {
+          console.error("Error fetching friend locations:", error);
+          setFriendLocations([]); // Clear on error
+        } finally {
+          setIsFetchingFriendLocations(false);
+        }
+      };
+
+      // Fetch immediately and then every 5 seconds
+      fetchFriendLocations();
+      intervalId = setInterval(fetchFriendLocations, 5000); // Poll every 5 seconds
+    } else {
+      // Clear friend locations and interval if mode is off or not authenticated
+      setFriendLocations([]);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isFriendLocationMode, isAuthenticated, token, logout, navigate]);
 
   const getBicycleSegment = async (start, end) => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/bicycle-route?start_lat=${start.lat}&start_lng=${start.lon}&end_lat=${end.lat}&end_lng=${end.lon}`);
+      const response = await fetch(`/api/bicycle-route?start_lat=${start.lat}&start_lng=${start.lon}&end_lat=${end.lat}&end_lng=${end.lon}`);
       if (!response.ok) return null;
       const data = await response.json();
       return {
@@ -158,7 +253,7 @@ export default function MainPage() {
           throw new Error("자전거 경로를 찾을 수 없습니다.");
         }
       } else { // 'multimodal'
-        const transitResponse = await fetch("http://127.0.0.1:8000/route/optimized", {
+        const transitResponse = await fetch("/route/optimized", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ start_lat: startCoords.lat, start_lon: startCoords.lon, end_lat: endCoords.lat, end_lon: endCoords.lon }),
@@ -280,7 +375,7 @@ export default function MainPage() {
     setIsPredictionMode(true);
     try {
       const results = await Promise.all(stations.map(station =>
-        fetch(`http://localhost:8000/predict/hybrid/${station.station_id}?n_minutes=${diffMinutes}`).then(res => res.json()).catch(() => null)
+        fetch(`/predict/hybrid/${station.station_id}?n_minutes=${diffMinutes}`).then(res => res.json()).catch(() => null)
       ));
       const newPredictionData = results.filter(Boolean).reduce((acc, res) => {
         acc[res.station_id] = res.predicted_bike_count;
@@ -303,7 +398,7 @@ export default function MainPage() {
 
   return (
     <div className="mp-root">
-      {(isPredicting || isLoadingRoute) && <div className="mp-loading-overlay">{isLoadingRoute ? '경로 탐색 중...' : '예측 중...'}</div>}
+      {(isPredicting || isLoadingRoute || isFetchingFriendLocations) && <div className="mp-loading-overlay">{isLoadingRoute ? '경로 탐색 중...' : isFetchingFriendLocations ? '친구 위치 로딩 중...' : '예측 중...'}</div>}
       <div className="mp-top">
         <Header />
         {isMobile && selectedRoute && (
@@ -311,7 +406,7 @@ export default function MainPage() {
             <RouteDetailPanel route={selectedRoute} onBack={() => setSelectedRoute(null)} />
           </div>
         )}
-        {(!isMobile || !selectedRoute) && (
+        {(!isMobile || !selectedRoute) && !isFriendLocationMode && ( // Add !isFriendLocationMode
           <section className="mp-cards">
             <RouteCard from={from} setFrom={setFrom} to={to} setTo={setTo} />
             <TimeCard timeText={timeText} setTimeText={setTimeText} openTimeModal={openTimeModal} />
@@ -328,6 +423,9 @@ export default function MainPage() {
             riderToTrack={isRiding ? riderId : null}
             myCurrentLocation={myLocation}
             nearbyStations={nearbyStations}
+            onMarkerClick={handleMarkerClick}
+            isFriendLocationMode={isFriendLocationMode} // Pass to map
+            friendLocations={friendLocations}         // Pass to map
           />
           {isRoutesOpen && (
             (!isMobile || !selectedRoute) && (
@@ -352,19 +450,40 @@ export default function MainPage() {
         <button className="mp-iconBtn" type="button" aria-label="메뉴" onClick={openSideMenu}>
           <img src="/list.svg" alt="메뉴" width="23" height="15" />
         </button>
-        <button 
-          className="mp-mode-toggle" 
-          onClick={() => setSearchMode(prev => prev === 'multimodal' ? 'bicycle' : 'multimodal')}
-        >
-          {searchMode === 'multimodal' ? '🚲+🚌' : '🚲'}
-        </button>
-        <button className="mp-cta" onClick={handleSearch} disabled={isLoadingRoute}>길찾기</button>
-        <button className={`mp-iconBtn ${isRiding ? 'riding' : ''}`} onClick={() => setIsRiding(!isRiding)}>
-          {isRiding ? '■' : '▶'}
-        </button>
+        {!isFriendLocationMode && ( // Conditionally render search-related buttons
+          <>
+            <button 
+              className="mp-mode-toggle" 
+              onClick={() => setSearchMode(prev => prev === 'multimodal' ? 'bicycle' : 'multimodal')}
+            >
+              {searchMode === 'multimodal' ? '🚲+🚌' : '🚲'}
+            </button>
+            <button className="mp-cta" onClick={handleSearch} disabled={isLoadingRoute}>길찾기</button>
+            <button className={`mp-iconBtn ${isRiding ? 'riding' : ''}`} onClick={() => setIsRiding(!isRiding)}>
+              {isRiding ? '■' : '▶'}
+            </button>
+          </>
+        )}
       </nav>
-      <SideMenu isOpen={isSideMenuOpen} onClose={closeSideMenu} />
+      <SideMenu 
+        isOpen={isSideMenuOpen} 
+        onClose={closeSideMenu} 
+        onToggleFriendLocationMode={handleToggleFriendLocationMode}
+        isFriendLocationMode={isFriendLocationMode}
+        isSharingLocation={isSharingLocation} // Pass the state
+        onToggleShareLocation={handleToggleShareLocation} // Pass the handler
+      />
       <TimePickerModal open={isTimeOpen} initialValue={initialTimeValue} onClose={closeTimeModal} onConfirm={handleTimeConfirm} />
+      <StationInfoBox 
+        station={selectedStation} 
+        onShowHistory={handleShowHistory}
+        onClose={handleCloseStationBox} 
+      />
+      <HistoricalDataModal 
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        station={selectedStation}
+      />
     </div>
   );
 }

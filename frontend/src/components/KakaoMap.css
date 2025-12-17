@@ -42,3 +42,20 @@
   position: relative;
   z-index: 1;
 }
+
+/* New styles for friend name overlay */
+.overlay-content.friend-name {
+  background-color: #555; /* Darker background for friend names */
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  transform: translateX(-50%); /* Center the overlay */
+  left: 50%;
+  position: absolute; /* Position absolutely relative to the marker */
+  bottom: 100%; /* Place above the marker */
+  margin-bottom: 5px; /* Spacing */
+}
+
