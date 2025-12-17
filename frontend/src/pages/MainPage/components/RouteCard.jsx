@@ -9,7 +9,11 @@ export default function RouteCard({ from, setFrom, to, setTo }) {
     <>
       <div className="mp-card mp-card--route">
         <div className="mp-routeCol" aria-hidden="true">
-          <div className="mp-dot mp-dot--from">P</div>
+          <img
+            src="/departure.svg"
+            alt="출발지"
+            className="mp-dot mp-dot--from"
+          />
           <div className="mp-routeLine" />
           <div className="mp-dot mp-dot--to" />
         </div>

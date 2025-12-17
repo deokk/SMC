@@ -1,9 +1,7 @@
 export default function TimeCard({ timeText, setTimeText, openTimeModal }) {
   return (
     <div className="mp-card mp-card--time">
-      <div className="mp-timeIcon" aria-hidden="true">
-        P
-      </div>
+      <img src="/time.svg" alt="시간" className="mp-timeIcon" />
 
       <div className="mp-row mp-row--time">
         {/* ✅ 클릭 시 모달만 열리도록 readOnly */}
@@ -16,7 +14,11 @@ export default function TimeCard({ timeText, setTimeText, openTimeModal }) {
           placeholder="시간"
           aria-label="출발 시간"
         />
-        <button className="mp-clear" onClick={() => setTimeText("")} aria-label="시간 지우기">
+        <button
+          className="mp-clear"
+          onClick={() => setTimeText("")}
+          aria-label="시간 지우기"
+        >
           ×
         </button>
       </div>

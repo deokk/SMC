@@ -3,10 +3,9 @@ export default function Header() {
     <header className="mp-header" aria-label="SMC header">
       <div className="mp-headerPill">
         <div className="mp-logo">
-          {/* placeholder */}
-          <span className="mp-logoBadge" aria-hidden="true">
-            P
-          </span>
+          <div className="mp-logoBadge">
+            <img src="/logo.svg" alt="SMC" className="mp-logoBadgeImg" />
+          </div>
           <span className="mp-logoText">SMC</span>
         </div>
       </div>
