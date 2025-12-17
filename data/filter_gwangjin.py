@@ -2,6 +2,7 @@ import os
 import sys
 from sqlalchemy import text
 
+# 광진구만 걸러주는 코드
 # Add the parent directory to the path to allow imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.database import engine

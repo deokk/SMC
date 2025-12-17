@@ -1,25 +1,30 @@
-# check_env.py
 import os
 from dotenv import load_dotenv
 
 # .env 파일 로드
+# 이 스크립트가 프로젝트 루트에 있다고 가정합니다.
+# 만약 다른 위치에 있다면, dotenv_path를 명시해야 합니다.
+# 예: load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 load_dotenv()
 
-# MASTER_API_KEY 값 가져오기
-master_api_key = os.getenv("MASTER_API_KEY")
+# ORS_API_KEY 환경 변수 가져오기
+api_key = os.getenv("ORS_API_KEY")
 
 # 결과 출력
-if master_api_key:
-    print(f"✅ MASTER_API_KEY를 성공적으로 찾았습니다.")
-    # 보안을 위해 키의 일부만 출력
-    print(f"   - 값(일부): {master_api_key[:4]}...{master_api_key[-4:]}")
+if api_key:
+    print(f"✅ ORS_API_KEY를 성공적으로 로드했습니다.")
+    print(f"   - 일부만 표시: {api_key[:5]}...{api_key[-5:]}")
 else:
-    print(f"❌ MASTER_API_KEY를 .env 파일에서 찾을 수 없습니다.")
-    print(f"   - .env 파일에 'MASTER_API_KEY=your_key_value' 형식으로 저장되어 있는지 확인해주세요.")
+    print(f"❌ ORS_API_KEY를 로드하지 못했습니다.")
+    print("   - .env 파일이 프로젝트 루트 디렉터리에 있는지 확인하세요.")
+    print("   - .env 파일에 'ORS_API_KEY=Your_Key' 형식으로 키가 저장되었는지 확인하세요.")
+    print("   - `python-dotenv` 라이브러리가 설치되었는지 확인하세요. (pip install python-dotenv)")
 
-# 다른 키들도 확인
-db_user = os.getenv("DB_USER")
-if db_user:
-    print(f"✅ DB_USER 키는 찾았습니다: {db_user}")
-else:
-    print(f"❌ DB_USER 키는 찾을 수 없습니다.")
+print("\n--- 모든 로드된 환경 변수 (일부) ---")
+# 디버깅을 위해 로드된 모든 환경 변수를 출력해볼 수 있습니다.
+# 민감한 정보가 있을 수 있으니 주의하세요.
+for key, value in os.environ.items():
+    if "KEY" in key.upper() or "SECRET" in key.upper():
+        print(f"{key}: ...")
+    elif "ORS" in key.upper():
+         print(f"{key}: {value[:5]}...")

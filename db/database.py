@@ -2,6 +2,7 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base # Add this import
 from dotenv import load_dotenv
 
 # .env 파일 경로를 지정하여 환경 변수 로드
@@ -20,6 +21,9 @@ engine = create_engine(DATABASE_URL)
 # 데이터베이스 세션을 생성하기 위한 SessionLocal 클래스
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# 모든 SQLAlchemy ORM 모델이 상속할 Base 클래스
+Base = declarative_base() # Add this line
+
 def get_db():
     """FastAPI에서 사용할 데이터베이스 세션 의존성 주입 함수"""
     db = SessionLocal()
@@ -27,6 +31,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 # 연결 테스트
 try:

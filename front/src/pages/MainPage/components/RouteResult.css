@@ -1,0 +1,373 @@
+.rr-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f4f6fb;
+  padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.rr-backBtn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #6f7ff2;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  transition: color 0.2s;
+}
+
+.rr-backBtn:hover {
+  color: #5c6cc8;
+}
+
+.rr-header {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rr-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2a44;
+}
+
+/* 대중교통 상세 화면 */
+.rr-transitHeader {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #dfe3f2;
+}
+
+.rr-transitTitle {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #6f7ff2;
+}
+
+.rr-transitTime {
+  font-size: 36px;
+  font-weight: 900;
+  color: #1f2a44;
+  margin-bottom: 4px;
+}
+
+.rr-transitSubInfo {
+  font-size: 13px;
+  color: #999;
+}
+
+/* 타임라인 바 */
+.rr-timelineBarContainer {
+  margin: 20px 0;
+  padding: 0 16px;
+}
+
+.rr-timelineBar {
+  display: flex;
+  height: 28px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f0f0f0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.rr-timelineSegment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  position: relative;
+  min-width: 30px;
+}
+
+.rr-timelineSegment--walking {
+  background: #bfc7dd;
+}
+
+.rr-timelineSegment--transit {
+  background: #78d142;
+}
+
+.rr-segmentLabel {
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 경로 상세 */
+.rr-transitDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rr-transitStep {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dfe3f2;
+}
+
+.rr-transitStepIcon {
+  font-size: 28px;
+  min-width: 28px;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.rr-transitStepContent {
+  flex: 1;
+}
+
+.rr-stepHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.rr-stepMode {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2a44;
+}
+
+.rr-stepDuration {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6f7ff2;
+}
+
+.rr-stepLocation {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+/* 대중교통 라인 정보 */
+.rr-transitLineDetails {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.rr-transitLines {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rr-transitLine {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #f0f8e8;
+  border: 1px solid #78d142;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #78d142;
+}
+
+.rr-transitLineInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.rr-transitLineInfo:last-child {
+  border-bottom: none;
+}
+
+.rr-lineIcon {
+  font-size: 16px;
+}
+
+.rr-lineName {
+  font-weight: 700;
+  color: #1f2a44;
+  min-width: 50px;
+}
+
+.rr-lineTime {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+.rr-lineStations {
+  color: #999;
+  font-size: 11px;
+}
+
+.rr-lineStatus {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rr-lineStatus--normal {
+  background: #fff2cc;
+  color: #f39c12;
+}
+
+.rr-lineStatus--comfort {
+  background: #e8f8e8;
+  color: #27ae60;
+}
+
+/* 모드 선택 버튼들 */
+.rr-modeSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rr-modeBtn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #dfe3f2;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.rr-modeBtn:hover {
+  background: #f9f9f9;
+  border-color: #6f7ff2;
+  box-shadow: 0 4px 12px rgba(111, 127, 242, 0.15);
+}
+
+.rr-modeBtn:active {
+  transform: scale(0.98);
+}
+
+.rr-modeIcon {
+  font-size: 32px;
+  min-width: 32px;
+}
+
+.rr-modeInfo {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rr-modeLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2a44;
+}
+
+.rr-modeTime {
+  font-size: 18px;
+  font-weight: 700;
+  color: #6f7ff2;
+}
+
+/* 상세 정보 화면 */
+.rr-detailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rr-detailTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2a44;
+}
+
+.rr-detailTime {
+  font-size: 22px;
+  font-weight: 900;
+  color: #6f7ff2;
+}
+
+.rr-walkingInfo {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.rr-distanceInfo {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2a44;
+  text-align: center;
+  border: 1px solid #dfe3f2;
+}
+
+.rr-stepsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rr-step {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dfe3f2;
+}
+
+.rr-stepIcon {
+  font-size: 28px;
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.rr-stepContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rr-stepDesc {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2a44;
+}
+
+.rr-stepTime {
+  font-size: 13px;
+  color: #999;
+}

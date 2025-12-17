@@ -15,32 +15,13 @@ from sqlalchemy import (
 
 # Add the parent directory to the path to allow imports from db
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from db.database import engine
+# Import the central engine and Base
+from db.database import engine, Base
 
-# Import the User model and its Base
-from backend.models.user import Base # New import
-
-# db/create_tables.py
-import sys
-import os
-from sqlalchemy import (
-    create_engine,
-    MetaData,
-    Table,
-    Column,
-    String,
-    DateTime,
-    Float,
-    Integer,
-    PrimaryKeyConstraint
-)
-
-# Add the parent directory to the path to allow imports from db
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from db.database import engine
-
-# Import the User model and its Base
-from backend.models.user import Base # New import
+# Import all ORM models to register them with the Base's metadata
+from backend.models.user import User
+from backend.models.ride import UserRideHistory
+from backend.models.friend import Friend
 
 metadata = MetaData()
 
@@ -140,13 +121,15 @@ transit_stops = Table(
 
 def create_tables():
     """
-    Connects to the database and creates the necessary tables if they don't exist.
+    Connects to the database and creates all necessary tables if they don't exist.
     """
     try:
         print("Creating tables in the database if they don't exist...")
-        # Create tables defined via declarative_base
+        # Create all tables defined via declarative_base (User, UserRideHistory, Friend)
+        # By importing them, they are registered with the central Base metadata.
         Base.metadata.create_all(engine, checkfirst=True)
-        # Create tables defined via MetaData
+        
+        # Create tables defined manually via MetaData
         metadata.create_all(engine, checkfirst=True)
         print("Tables created successfully (if they didn't already exist).")
     except Exception as e:
@@ -154,4 +137,3 @@ def create_tables():
 
 if __name__ == "__main__":
     create_tables()
-

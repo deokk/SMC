@@ -4,6 +4,12 @@ export default function useKakaoLoader() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+<<<<<<< HEAD
+=======
+    // For debugging: Log all environment variables Vite is aware of.
+    console.log("Vite env variables:", import.meta.env);
+    
+>>>>>>> backend
     const appkey = import.meta.env.VITE_KAKAO_MAP_APPKEY;
 
     if (!appkey) {
