@@ -59,10 +59,15 @@ class RouteResponse(BaseModel):
 
 class PersonalizedPatternResponse(BaseModel):
     """개인화된 라이딩 패턴 분석 응답을 위한 모델"""
-    message: str = Field(..., example="Personalized pattern analysis is under development.")
-    favorite_station_id: Optional[str] = Field("ST-509", description="가장 자주 이용하는 대여소 ID")
-    avg_duration_minutes: Optional[float] = Field(15.5, description="평균 주행 시간(분)")
-    total_trips: Optional[int] = Field(42, description="총 주행 횟수")
+    total_trips: int
+    total_duration_minutes: int
+    average_duration_minutes: float
+    favorite_start_station_id: Optional[str]
+    favorite_start_station_name: Optional[str] = None
+    favorite_end_station_id: Optional[str]
+    favorite_end_station_name: Optional[str] = None
+    most_active_day: Optional[str] = None
+
 
 # --- 실시간 라이더 트래킹을 위한 스키마 ---
 

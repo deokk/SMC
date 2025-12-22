@@ -207,7 +207,53 @@ except Exception as e:
     print(f"Warning: Could not reflect tables. {e}")
 
 
+# --- Helper Functions ---
+def get_station_name(station_id: Optional[str], db: Session) -> Optional[str]:
+    """BikeAvailabilityRealtime 테이블에서 대여소 ID로 이름을 조회합니다."""
+    if not station_id:
+        return None
+    
+    # BikeAvailabilityRealtime 테이블에서 station_id에 해당하는 station_display_name을 조회
+    query = select(BikeAvailabilityRealtime.c.station_display_name).distinct().where(BikeAvailabilityRealtime.c.station_id == station_id)
+    result = db.execute(query).scalar_one_or_none()
+    return result
+
 # --- API 엔드포인트 정의 ---
+
+@app.get("/users/me/patterns", response_model=PersonalizedPatternResponse)
+def get_my_patterns(db: Session = Depends(get_db), current_user: User = Depends(security.get_current_user)):
+    """현재 로그인된 사용자의 주행 패턴 통계를 반환합니다."""
+    stats = ride_crud.get_pattern_stats_by_user(db, user_id=current_user.id)
+    
+    if stats["total_trips"] == 0:
+        return PersonalizedPatternResponse(
+            total_trips=0,
+            total_duration_minutes=0,
+            average_duration_minutes=0.0,
+            favorite_start_station_id=None,
+            favorite_end_station_id=None,
+            most_active_day=None
+        )
+
+    # Get station names from stations_gwangjin
+    fav_start_station_name = get_station_name(stats["favorite_start_station_id"], db)
+    fav_end_station_name = get_station_name(stats["favorite_end_station_id"], db)
+    
+    return PersonalizedPatternResponse(
+        total_trips=stats["total_trips"],
+        total_duration_minutes=stats["total_duration_minutes"],
+        average_duration_minutes=stats["average_duration_minutes"],
+        favorite_start_station_id=stats["favorite_start_station_id"],
+        favorite_start_station_name=fav_start_station_name,
+        favorite_end_station_id=stats["favorite_end_station_id"],
+        favorite_end_station_name=fav_end_station_name,
+        most_active_day=stats["most_active_day"],
+    )
+
+@app.get("/users/{user_id}/patterns", response_model=PersonalizedPatternResponse, deprecated=True)
+def get_user_patterns(user_id: int, db: Session = Depends(get_db)):
+    # This is the old placeholder, now deprecated
+    raise HTTPException(status_code=404, detail="This endpoint is deprecated. Use /users/me/patterns.")
 
 @app.get("/api/bicycle-route", response_model=BicycleRouteResponse)
 async def get_bicycle_route(
@@ -333,6 +379,53 @@ async def websocket_track_rider(websocket: WebSocket, rider_id: str, redis_conn:
 @app.get("/users/{user_id}/patterns", response_model=PersonalizedPatternResponse)
 def get_user_patterns(user_id: int, db: Session = Depends(get_db)):
     return PersonalizedPatternResponse(message="Personalized pattern analysis is under development.", favorite_station_id="ST-509", avg_duration_minutes=15.5, total_trips=42)
+
+def find_nearest_station(lat: float, lon: float, db: Session) -> Optional[StationRealtime]:
+    """주어진 좌표에서 가장 가까운 대여소를 찾습니다."""
+    # This is not the most efficient way for a large number of stations,
+    # but it's acceptable for this project's scale.
+    # A spatial index (e.g., PostGIS) would be better for production.
+    all_stations_query = select(
+        BikeAvailabilityRealtime.c.station_id,
+        BikeAvailabilityRealtime.c.latitude,
+        BikeAvailabilityRealtime.c.longitude
+    ).distinct(BikeAvailabilityRealtime.c.station_id)
+    
+    all_stations = db.execute(all_stations_query).fetchall()
+
+    if not all_stations:
+        return None
+
+    closest_station_id = None
+    min_dist = float('inf')
+
+    for station in all_stations:
+        dist = haversine_distance(lat, lon, station.latitude, station.longitude)
+        if dist < min_dist:
+            min_dist = dist
+            closest_station_id = station.station_id
+            
+    if closest_station_id:
+        # Fetch the full data for the closest station
+        latest_station_query = select(BikeAvailabilityRealtime).where(
+            BikeAvailabilityRealtime.c.station_id == closest_station_id
+        ).order_by(BikeAvailabilityRealtime.c.timestamp.desc()).limit(1)
+        
+        station_realtime_data = db.execute(latest_station_query).fetchone()
+        if station_realtime_data:
+            return StationRealtime.model_validate(station_realtime_data._asdict())
+
+    return None
+
+@app.get("/rides/active", response_model=Optional[RideResponse])
+def get_active_ride(db: Session = Depends(get_db), current_user: User = Depends(security.get_current_user)):
+    """현재 진행 중인 주행 기록을 반환합니다."""
+    active_ride = ride_crud.get_active_ride_by_user(db, user_id=current_user.id)
+    if not active_ride:
+        # 진행 중인 주행이 없을 때 404 대신 204나 빈 객체를 반환하는 것이 더 일반적일 수 있음
+        # 여기서는 클라이언트가 응답 바디 유무로 판단하도록 None을 반환하고, FastAPI가 200 OK와 null body로 처리하게 함
+        return None
+    return active_ride
 
 @app.post("/rides/start", response_model=RideResponse)
 def start_ride(ride_request: RideStartRequest, db: Session = Depends(get_db), current_user: User = Depends(security.get_current_user)):
@@ -609,7 +702,34 @@ def get_realtime_stations(db: Session = Depends(get_db), redis_conn: redis.Redis
         if cached_data: return json.loads(cached_data)
     except redis.RedisError as e:
         logging.error(f"Redis error in get_realtime_stations: {e}")
-    query = select(BikeAvailabilityRealtime)
+
+    # Explicitly select core columns to avoid errors if optional columns are missing
+    core_columns = [
+        BikeAvailabilityRealtime.c.station_id,
+        BikeAvailabilityRealtime.c.station_number,
+        BikeAvailabilityRealtime.c.station_display_name,
+        BikeAvailabilityRealtime.c.timestamp,
+        BikeAvailabilityRealtime.c.latitude,
+        BikeAvailabilityRealtime.c.longitude,
+        BikeAvailabilityRealtime.c.available_bikes,
+        BikeAvailabilityRealtime.c.station_capacity,
+        BikeAvailabilityRealtime.c.available_racks,
+        BikeAvailabilityRealtime.c.is_stockout,
+        BikeAvailabilityRealtime.c.hour,
+        BikeAvailabilityRealtime.c.day_of_week,
+        BikeAvailabilityRealtime.c.is_weekend
+    ]
+    query = select(*core_columns)
+    
+    # 광진구 필터 테이블이 있는 경우, 해당 테이블과 조인하여 필터링
+    if StationsGwangjin is not None:
+        query = query.join(
+            StationsGwangjin, 
+            BikeAvailabilityRealtime.c.station_number == StationsGwangjin.c.station_number
+        )
+    else:
+        logging.warning("StationsGwangjin 테이블을 사용할 수 없어 모든 대여소를 반환합니다.")
+    
     result = db.execute(query).fetchall()
     response_data = [StationRealtime.model_validate(row._asdict()) for row in result]
     json_compatible_data = [model.model_dump(mode='json') for model in response_data]

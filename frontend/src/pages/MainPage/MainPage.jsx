@@ -12,6 +12,7 @@ import useMediaQuery from "../../hooks/useMediaQuery";
 import useGeolocation from "../../hooks/useGeolocation";
 import StationInfoBox from "./components/StationInfoBox";
 import HistoricalDataModal from "./components/HistoricalDataModal";
+import AddFriendModal from "../../components/AddFriendModal"; // Import AddFriendModal
 import { useAuth } from "../../context/AuthContext"; // Import useAuth
 import "./MainPage.css";
 import "./components/StationInfoBox.css";
@@ -87,7 +88,73 @@ export default function MainPage() {
   const [nearbyStations, setNearbyStations] = useState([]);
   
   const { isAuthenticated, token, username, logout } = useAuth(); // Use useAuth hook
-  const [isRiding, setIsRiding] = useState(false); // isRiding state is still for riding history, not location sharing
+  const [isRiding, setIsRiding] = useState(false);
+  const [isRideApiLoading, setIsRideApiLoading] = useState(false); // To prevent double clicks
+
+  // Check for active ride on component mount
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      const checkActiveRide = async () => {
+        try {
+          const response = await fetch('/rides/active', {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (response.ok && response.status !== 204) {
+            const activeRide = await response.json();
+            if (activeRide) {
+              setIsRiding(true);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to check for active ride:", error);
+        }
+      };
+      checkActiveRide();
+    }
+  }, [isAuthenticated, token]);
+
+  const handleToggleRiding = async () => {
+    if (!isAuthenticated) {
+      alert("주행 기록을 시작하려면 로그인이 필요합니다.");
+      navigate('/login');
+      return;
+    }
+    if (!myLocation) {
+      alert("현재 위치를 확인할 수 없습니다. 위치 서비스를 활성화해주세요.");
+      return;
+    }
+    if (isRideApiLoading) return; // Prevent multiple requests
+
+    setIsRideApiLoading(true);
+
+    const url = isRiding ? '/rides/end' : '/rides/start';
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          latitude: myLocation.latitude,
+          longitude: myLocation.longitude,
+        }),
+      });
+
+      if (response.ok) {
+        setIsRiding(!isRiding); // Toggle state on success
+        alert(isRiding ? "주행이 종료되었습니다." : "주행 기록을 시작합니다!");
+      } else {
+        const errorData = await response.json();
+        alert(`오류: ${errorData.detail || '주행 상태 변경에 실패했습니다.'}`);
+      }
+    } catch (error) {
+      console.error(`Failed to ${isRiding ? 'end' : 'start'} ride:`, error);
+      alert("서버와 통신 중 오류가 발생했습니다.");
+    } finally {
+      setIsRideApiLoading(false);
+    }
+  };
   
   // My Location Sharing State
   const [isSharingLocation, setIsSharingLocation] = useState(false);
@@ -107,6 +174,7 @@ export default function MainPage() {
   const [isFriendLocationMode, setIsFriendLocationMode] = useState(false);
   const [friendLocations, setFriendLocations] = useState([]);
   const [isFetchingFriendLocations, setIsFetchingFriendLocations] = useState(false);
+  const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
 
   const handleMarkerClick = (station) => {
     setSelectedStation(station);
@@ -447,20 +515,51 @@ export default function MainPage() {
         </div>
       </main>
       <nav className="mp-bottom">
-        <button className="mp-iconBtn" type="button" aria-label="메뉴" onClick={openSideMenu}>
+        <button
+          className="mp-iconBtn"
+          type="button"
+          aria-label="메뉴"
+          onClick={openSideMenu}
+        >
           <img src="/list.svg" alt="메뉴" width="23" height="15" />
         </button>
         {!isFriendLocationMode && ( // Conditionally render search-related buttons
           <>
-            <button 
-              className="mp-mode-toggle" 
-              onClick={() => setSearchMode(prev => prev === 'multimodal' ? 'bicycle' : 'multimodal')}
+            <button
+              className="mp-iconBtn"
+              type="button"
+              aria-label="이동 수단 전환"
+              onClick={() =>
+                setSearchMode((prev) =>
+                  prev === "multimodal" ? "bicycle" : "multimodal"
+                )
+              }
             >
-              {searchMode === 'multimodal' ? '🚲+🚌' : '🚲'}
+              {searchMode === "multimodal" ? (
+                <div
+                  style={{ display: "flex", gap: "3px", alignItems: "center" }}
+                >
+                  <img src="/bike.svg" alt="자전거" width="14" height="14" />
+                  <img src="/plus.svg" alt="+" width="12" height="12" />
+                  <img src="/trans.svg" alt="대중교통" width="14" height="14" />
+                </div>
+              ) : (
+                <img src="/bike.svg" alt="자전거" width="20" height="20" />
+              )}
             </button>
-            <button className="mp-cta" onClick={handleSearch} disabled={isLoadingRoute}>길찾기</button>
-            <button className={`mp-iconBtn ${isRiding ? 'riding' : ''}`} onClick={() => setIsRiding(!isRiding)}>
-              {isRiding ? '■' : '▶'}
+            <button
+              className="mp-cta"
+              onClick={handleSearch}
+              disabled={isLoadingRoute}
+            >
+              길찾기
+            </button>
+            <button
+              className={`mp-iconBtn ${isRiding ? "riding" : ""}`}
+              onClick={handleToggleRiding}
+              disabled={isRideApiLoading}
+            >
+              {isRiding ? "■" : "▶"}
             </button>
           </>
         )}
@@ -472,6 +571,7 @@ export default function MainPage() {
         isFriendLocationMode={isFriendLocationMode}
         isSharingLocation={isSharingLocation} // Pass the state
         onToggleShareLocation={handleToggleShareLocation} // Pass the handler
+        setIsAddFriendModalOpen={setIsAddFriendModalOpen}
       />
       <TimePickerModal open={isTimeOpen} initialValue={initialTimeValue} onClose={closeTimeModal} onConfirm={handleTimeConfirm} />
       <StationInfoBox 
@@ -484,6 +584,7 @@ export default function MainPage() {
         onClose={() => setIsHistoryModalOpen(false)}
         station={selectedStation}
       />
+      {isAddFriendModalOpen && <AddFriendModal onClose={() => setIsAddFriendModalOpen(false)} />}
     </div>
   );
 }

@@ -1,0 +1,78 @@
+.rhp-container {
+  padding: 2rem;
+  max-width: 900px;
+  margin: auto;
+  background-color: #fff;
+  min-height: 100vh; /* Ensures the background covers the full height */
+}
+
+.rhp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.rhp-header h1 {
+  font-size: 2rem;
+  color: #333;
+}
+
+.rhp-back-btn {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.rhp-back-btn:hover {
+  background-color: #0056b3;
+}
+
+.rhp-table-container {
+    overflow-x: auto;
+}
+
+.rhp-ride-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.rhp-ride-table th,
+.rhp-ride-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.rhp-ride-table thead tr {
+  background-color: #4CAF50;
+  color: white;
+  font-weight: bold;
+}
+
+.rhp-ride-table tbody tr:nth-of-type(even) {
+  background-color: #f9f9f9;
+}
+
+.rhp-ride-table tbody tr:hover {
+  background-color: #f1f1f1;
+}
+
+.rhp-ride-table td {
+    color: #555;
+}
+
+.rhp-container.error {
+    color: #D8000C;
+    background-color: #FFD2D2;
+    padding: 1rem;
+    border-radius: 5px;
+}

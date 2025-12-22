@@ -24,6 +24,8 @@ class RideResponse(BaseModel):
     user_id: int
     start_station_id: Optional[str] = None
     end_station_id: Optional[str] = None
+    start_station_name: Optional[str] = None
+    end_station_name: Optional[str] = None
     start_time: datetime
     end_time: Optional[datetime] = None
     duration_minutes: Optional[int] = None

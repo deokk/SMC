@@ -72,3 +72,19 @@
   margin-bottom: 15px;
   font-size: 14px;
 }
+
+.register-link-container {
+  margin-top: 20px;
+  font-size: 14px;
+  color: #555;
+}
+
+.register-link {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.register-link:hover {
+  text-decoration: underline;
+}

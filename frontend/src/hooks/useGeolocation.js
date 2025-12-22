@@ -23,13 +23,14 @@ const useGeolocation = (riderId, isSharingLocation = false) => {
       };
 
       const handleError = (err) => {
+        console.error("Geolocation error:", err);
         setError(err.message);
       };
 
       if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 20000,
           maximumAge: 0
         });
       } else {

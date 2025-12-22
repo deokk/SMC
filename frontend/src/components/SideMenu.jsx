@@ -1,13 +1,18 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
-import AddFriendModal from "./AddFriendModal"; // Add this import
 import "./SideMenu.css";
 
-export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, isFriendLocationMode, isSharingLocation, onToggleShareLocation }) {
+export default function SideMenu({
+  isOpen,
+  onClose,
+  onToggleFriendLocationMode,
+  isFriendLocationMode,
+  isSharingLocation,
+  onToggleShareLocation,
+  setIsAddFriendModalOpen, // Receive setter from parent
+}) {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
-  const [showAddFriendModal, setShowAddFriendModal] = useState(false); // New state
 
   if (!isOpen) return null;
 
@@ -24,10 +29,10 @@ export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, 
 
   const handleAddFriendClick = () => {
     if (!isAuthenticated) {
-      handleProtectedAction('친구 추가'); // Use the protected action handler
+      handleProtectedAction('친구 추가');
     } else {
-      setShowAddFriendModal(true); // Open the modal
-      onClose(); // Close the side menu
+      setIsAddFriendModalOpen(true); // Use setter from props
+      onClose();
     }
   };
 
@@ -35,8 +40,8 @@ export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, 
     if (!isAuthenticated) {
       handleProtectedAction('친구 위치');
     } else {
-      onToggleFriendLocationMode(); // Toggle the mode
-      onClose(); // Now close the side menu immediately after toggling friend location
+      onToggleFriendLocationMode();
+      onClose();
     }
   };
   
@@ -45,22 +50,19 @@ export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, 
       handleProtectedAction('위치 공유');
     } else {
       onToggleShareLocation();
-      onClose(); // Close the side menu
+      onClose();
     }
   };
 
   const handleLogout = () => {
     logout();
     onClose();
-    navigate('/'); // Navigate to home page after logout
+    navigate('/');
   };
 
   return (
     <>
-      {/* 오버레이 */}
       <div className="sm-overlay" onClick={onClose} />
-
-      {/* 사이드 메뉴 */}
       <div className="sm-menu">
         <div className="sm-header">
           <h3 className="sm-title">메뉴</h3>
@@ -68,40 +70,49 @@ export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, 
             ×
           </button>
         </div>
-
         <div className="sm-content">
-          <button 
-            className={`sm-item ${isSharingLocation ? 'active' : ''}`} // Add active class
+          <button
+            className={`sm-item ${isSharingLocation ? "active" : ""}`}
             onClick={handleShareLocationClick}
           >
-            <span className="sm-itemIcon">📍</span>
-            <span className="sm-itemLabel">{isSharingLocation ? '위치 공유 끄기' : '위치 공유'}</span> {/* Dynamic label */}
+            <img src="/location.svg" alt="위치 공유" className="sm-itemIcon" />
+            <span className="sm-itemLabel">
+              {isSharingLocation ? "위치 공유 끄기" : "위치 공유"}
+            </span>
             <span className="sm-itemArrow">›</span>
           </button>
-
-          <button 
-            className={`sm-item ${isFriendLocationMode ? 'active' : ''}`} // Add active class
+          <button
+            className={`sm-item ${isFriendLocationMode ? "active" : ""}`}
             onClick={handleFriendLocationClick}
           >
-            <span className="sm-itemIcon">✓</span>
-            <span className="sm-itemLabel">{isFriendLocationMode ? '친구 위치 끄기' : '친구 위치'}</span> {/* Dynamic label */}
+            <img src="/pin.svg" alt="친구 위치" className="sm-itemIcon" width="20" height="20" />
+            <span className="sm-itemLabel">
+              {isFriendLocationMode ? "친구 위치 끄기" : "친구 위치"}
+            </span>
             <span className="sm-itemArrow">›</span>
           </button>
-
           <button className="sm-item" onClick={handleAddFriendClick}>
-            <span className="sm-itemIcon">👥</span>
+            <img src="/plusfriend.svg" alt="친구 추가" className="sm-itemIcon" width="20" height="20" />
             <span className="sm-itemLabel">친구 추가</span>
             <span className="sm-itemArrow">›</span>
           </button>
-
-          <button className="sm-item" onClick={() => handleProtectedAction('AI 패턴 분석')}>
-            <span className="sm-itemIcon">📋</span>
-            <span className="sm-itemLabel">AI 패턴 분석</span>
+          <button
+            className="sm-item"
+            onClick={() => {
+              if (isAuthenticated) {
+                navigate("/mypage");
+              } else {
+                alert("로그인이 필요합니다.");
+                navigate("/login");
+              }
+              onClose();
+            }}
+          >
+            <img src="/list.svg" alt="마이페이지" className="sm-itemIcon" width="20" height="20" />
+            <span className="sm-itemLabel">마이페이지</span>
             <span className="sm-itemArrow">›</span>
           </button>
-          
           <div className="sm-divider"></div>
-
           {isAuthenticated ? (
             <button className="sm-item" onClick={handleLogout}>
               <span className="sm-itemIcon">🔒</span>
@@ -110,19 +121,17 @@ export default function SideMenu({ isOpen, onClose, onToggleFriendLocationMode, 
           ) : (
             <>
               <Link to="/login" className="sm-item" onClick={onClose}>
-                <span className="sm-itemIcon">🔑</span>
+                <img src="/login.svg" alt="로그인" className="sm-itemIcon" width="20" height="20" />
                 <span className="sm-itemLabel">로그인</span>
               </Link>
-              
               <Link to="/register" className="sm-item" onClick={onClose}>
-                <span className="sm-itemIcon">👤</span>
+                <img src="/registration.svg" alt="회원가입" className="sm-itemIcon" width="20" height="20" />
                 <span className="sm-itemLabel">회원가입</span>
               </Link>
             </>
           )}
         </div>
       </div>
-      {showAddFriendModal && <AddFriendModal onClose={() => setShowAddFriendModal(false)} />}
     </>
   );
 }

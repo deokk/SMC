@@ -1,9 +1,7 @@
 export default function TimeCard({ timeText, setTimeText, openTimeModal }) {
   return (
     <div className="mp-card mp-card--time">
-      <div className="mp-timeIcon" aria-hidden="true">
-        P
-      </div>
+      <img src="/time.svg" alt="시간" className="mp-timeIcon" />
 
       <div className="mp-row mp-row--time">
         {/* ✅ 클릭 시 모달만 열리도록 readOnly */}

@@ -9,7 +9,9 @@ export default function StationInfoBox({ station, onShowHistory, onClose }) {
   return (
     <div className="station-info-box">
       <button className="sib-close-btn" onClick={onClose}>×</button>
-      <div className="sib-title">{station.station_name || station.station_display_name}</div>
+      <div className="sib-title">
+        {station.station_display_name || station.station_name} ({station.station_id})
+      </div>
       <div className="sib-content">
         <div>이용 가능: {station.available_bikes}대</div>
       </div>

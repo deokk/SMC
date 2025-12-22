@@ -1,1 +1,0 @@
-// Header.jsx (not used in current plan, but might be requested later)
