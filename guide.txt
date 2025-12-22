@@ -1,0 +1,265 @@
+# --- GPS 기능 프론트엔드 연동 가이드 ---
+
+안녕하세요! 백엔드에 구현된 실시간 위치 추적 기능을 프론트엔드(React)에 연동하는 방법을 안내해 드립니다.
+
+## 개요
+
+이 기능은 두 부분으로 나뉩니다.
+1.  **내 위치 보내기:** 사용자의 현재 위치를 주기적으로 서버에 전송합니다. (예: 라이딩 시작 시)
+2.  **위치 받아서 지도에 표시하기:** 다른 사용자나 내 자신의 현재 위치를 WebSocket을 통해 실시간으로 받아 지도에 표시합니다.
+
+---
+
+## 1. 내 위치 보내기 (Geolocation & POST)
+
+브라우저의 `navigator.geolocation.watchPosition` API를 사용해 사용자의 위치를 지속적으로 추적하고, 변경될 때마다 백엔드의 `POST /riders/{rider_id}/location` 엔드포인트로 전송합니다.
+
+### 단계 1: `useGeolocation` Hook 만들기
+
+위치 추적 로직을 재사용 가능하도록 Custom Hook으로 만듭니다.
+
+**`frontend/src/hooks/useGeolocation.js`** 파일을 생성하고 아래 코드를 추가하세요.
+
+```javascript
+import { useState, useEffect } from 'react';
+
+const useGeolocation = (riderId, isActive = false) => {
+  const [location, setLocation] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      // 위치 추적이 비활성화 상태이면 아무것도 하지 않음
+      return;
+    }
+
+    let watchId;
+
+    const handleSuccess = (position) => {
+      const { latitude, longitude } = position.coords;
+      const newLocation = { latitude, longitude };
+      setLocation(newLocation);
+      
+      // 서버로 위치 정보 전송
+      if (riderId) {
+        fetch(`/riders/${riderId}/location`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newLocation),
+        }).catch(err => console.error("위치 전송 실패:", err));
+      }
+    };
+
+    const handleError = (err) => {
+      setError(err.message);
+    };
+
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true, // 높은 정확도 사용
+        timeout: 10000,           // 10초 타임아웃
+        maximumAge: 0             // 캐시 사용 안함
+      });
+    } else {
+      setError("이 브라우저에서는 Geolocation이 지원되지 않습니다.");
+    }
+
+    // 컴포넌트 언마운트 시 watch 중단
+    return () => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [riderId, isActive]); // riderId나 isActive 상태가 변경될 때마다 Effect 재실행
+
+  return { location, error };
+};
+
+export default useGeolocation;
+```
+
+### 단계 2: 컴포넌트에서 Hook 사용하기
+
+`MainPage.jsx`나 라이딩 시작/종료를 관리하는 다른 컴포넌트에서 이 훅을 사용합니다. `isActive` prop을 통해 위치 전송을 제어할 수 있습니다.
+
+```jsx
+// 예시: MainPage.jsx 또는 다른 컴포넌트
+import React, { useState } from 'react';
+import useGeolocation from './hooks/useGeolocation';
+
+function RideComponent() {
+  const [isRiding, setIsRiding] = useState(false);
+  const riderId = "user123"; // 실제로는 로그인된 사용자 ID를 사용해야 합니다.
+
+  // isRiding이 true일 때만 위치 추적 및 전송이 활성화됩니다.
+  const { location, error } = useGeolocation(riderId, isRiding);
+
+  const handleStartRiding = () => {
+    setIsRiding(true);
+    console.log("라이딩 시작!");
+  };
+
+  const handleStopRiding = () => {
+    setIsRiding(false);
+    console.log("라이딩 종료!");
+  };
+
+  return (
+    <div>
+      <h2>실시간 위치 추적</h2>
+      <button onClick={handleStartRiding} disabled={isRiding}>라이딩 시작</button>
+      <button onClick={handleStopRiding} disabled={!isRiding}>라이딩 종료</button>
+      
+      {isRiding && location && (
+        <p>
+          현재 위치: 위도 {location.latitude}, 경도 {location.longitude}
+        </p>
+      )}
+      {error && <p>위치 에러: {error}</p>}
+    </div>
+  );
+}
+
+export default RideComponent;
+```
+
+---
+
+## 2. 위치 받아서 지도에 표시하기 (WebSocket & Kakao Map)
+
+백엔드의 `WebSocket /ws/track/{rider_id}` 엔드포인트에 접속하여 실시간으로 위치 데이터를 받고, Kakao Map에 마커를 업데이트합니다.
+
+### 단계 1: `useRiderTracking` Hook 만들기
+
+WebSocket 연결 및 데이터 수신 로직을 관리하는 Custom Hook을 만듭니다.
+
+**`frontend/src/hooks/useRiderTracking.js`** 파일을 생성하고 아래 코드를 추가하세요.
+
+```javascript
+import { useState, useEffect, useRef } from 'react';
+
+const useRiderTracking = (riderId) => {
+  const [riderLocation, setRiderLocation] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const ws = useRef(null);
+
+  useEffect(() => {
+    if (!riderId) {
+      // 추적할 riderId가 없으면 연결 시도 안함
+      return;
+    }
+
+    // WebSocket URL 설정 (주소는 실제 환경에 맞게 조정 필요)
+    // 로컬 개발: "ws://localhost:8000/ws/track/"
+    // 배포 환경: "wss://your-domain.com/ws/track/"
+    const wsUrl = `ws://localhost:8000/ws/track/${riderId}`;
+    ws.current = new WebSocket(wsUrl);
+
+    ws.current.onopen = () => {
+      console.log(`WebSocket connected for rider: ${riderId}`);
+      setIsConnected(true);
+    };
+
+    ws.current.onmessage = (event) => {
+      const locationData = JSON.parse(event.data);
+      setRiderLocation(locationData);
+    };
+
+    ws.current.onclose = () => {
+      console.log("WebSocket disconnected");
+      setIsConnected(false);
+    };
+
+    ws.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    // 컴포넌트 언마운트 시 WebSocket 연결 종료
+    return () => {
+      if (ws.current) {
+        ws.current.close();
+      }
+    };
+  }, [riderId]); // riderId가 변경되면 WebSocket 재연결
+
+  return { riderLocation, isConnected };
+};
+
+export default useRiderTracking;
+```
+*참고: WebSocket URL (`ws://` 또는 `wss://`)은 개발/배포 환경에 맞게 수정해야 합니다.*
+
+### 단계 2: 지도 컴포넌트에서 Hook 사용 및 마커 표시
+
+`KaKaoMap.jsx` 컴포넌트에서 이 훅을 사용하여 라이더의 위치를 받고, 해당 위치에 마커를 표시/업데이트합니다.
+
+```jsx
+// frontend/src/components/KaKaoMap.jsx 수정 예시
+
+import React, { useEffect, useState, useRef } from 'react';
+import useRiderTracking from '../hooks/useRiderTracking'; // 방금 만든 훅 임포트
+
+// ... 기존 KaKaoMap.jsx 코드 ...
+
+// riderToTrack prop을 추가하여 추적할 라이더 ID를 받습니다.
+const KaKaoMap = ({ /* 기존 props */, riderToTrack }) => {
+  const mapRef = useRef(null);
+  const riderMarkerRef = useRef(null); // 라이더 마커를 저장할 ref
+
+  // 훅을 사용하여 라이더 위치를 실시간으로 추적
+  const { riderLocation } = useRiderTracking(riderToTrack);
+
+  // ... 기존 useEffect(() => { ... map 생성 로직 ... }, []);
+
+  // 라이더 위치가 업데이트될 때마다 마커를 이동시키는 Effect
+  useEffect(() => {
+    if (!mapRef.current || !window.kakao || !riderLocation) return;
+    
+    const map = mapRef.current;
+    const { latitude, longitude } = riderLocation;
+    const riderPosition = new window.kakao.maps.LatLng(latitude, longitude);
+
+    if (!riderMarkerRef.current) {
+      // 마커가 없으면 새로 생성
+      const marker = new window.kakao.maps.Marker({
+        position: riderPosition,
+        // (선택) 라이더를 위한 커스텀 아이콘 설정
+        // image: new window.kakao.maps.MarkerImage(...) 
+      });
+      marker.setMap(map);
+      riderMarkerRef.current = marker;
+    } else {
+      // 마커가 이미 있으면 위치만 업데이트
+      riderMarkerRef.current.setPosition(riderPosition);
+    }
+    
+    // (선택) 지도를 라이더 위치로 이동
+    // map.panTo(riderPosition);
+
+  }, [riderLocation]); // riderLocation이 바뀔 때마다 실행
+
+  return <div id="map" style={{ width: '100%', height: '100%' }}></div>;
+};
+
+export default KaKaoMap;
+```
+
+### 단계 3: 상위 컴포넌트에서 `riderToTrack` 전달
+
+`MainPage.jsx` 등 `KaKaoMap`을 사용하는 상위 컴포넌트에서 추적하고 싶은 라이더의 ID를 `riderToTrack` prop으로 넘겨줍니다.
+
+```jsx
+// MainPage.jsx 예시
+// ...
+<KaKaoMap 
+  /* ... 다른 props ... */ 
+  riderToTrack="user123" // 예시 ID, 실제로는 상태나 props에서 관리
+/>
+// ...
+```
+
+---
+
+이 가이드가 프론트엔드 개발에 도움이 되기를 바랍니다. 질문이 있으시면 언제든지 말씀해 주세요!

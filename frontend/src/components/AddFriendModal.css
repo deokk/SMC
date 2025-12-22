@@ -1,0 +1,105 @@
+.add-friend-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001; /* Higher than SideMenu */
+}
+
+.add-friend-modal-content {
+  background-color: #ffffff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+  position: relative;
+}
+
+.add-friend-modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 25px;
+  color: #333;
+  font-size: 24px;
+}
+
+.add-friend-input-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.add-friend-input-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+  font-weight: 500;
+}
+
+.add-friend-input-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.add-friend-input-group input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.add-friend-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.add-friend-submit-button,
+.add-friend-cancel-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  flex: 1; /* Make buttons take equal space */
+}
+
+.add-friend-submit-button {
+  background-color: #007bff;
+  color: white;
+  margin-right: 10px;
+}
+
+.add-friend-submit-button:hover {
+  background-color: #0056b3;
+}
+
+.add-friend-cancel-button {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.add-friend-cancel-button:hover {
+  background-color: #c7c7c7;
+}
+
+.add-friend-error-message {
+  color: #dc3545;
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+.add-friend-success-message {
+  color: #28a745;
+  margin-top: 15px;
+  font-size: 14px;
+}
