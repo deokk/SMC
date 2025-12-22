@@ -846,4 +846,3 @@ async def serve_react_app(full_path: str):
     if not os.path.exists(index_path):
         return Response(content="index.html not found", status_code=404)
     return FileResponse(index_path)
->>>>>>> backend
